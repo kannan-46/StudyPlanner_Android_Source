@@ -4,5 +4,18 @@
     "api/server.ts": {
       "maxDuration": 300
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "/api/server/(?<path>.*)",
+      "dest": "/api/server",
+      "transforms": [
+        {
+          "type": "request.path",
+          "op": "set",
+          "args": "/$path"
+        }
+      ]
+    }
+  ]
 }

@@ -35,11 +35,11 @@ Only one owner account is intended for the first release. User records are separ
 
 Before switching from the existing app, export its JSON backup from the old app's Settings screen and keep the file. After the new app has a hosted API and you sign in, open Settings → Import JSON backup. The importer validates the file before asking to replace that account's current planner. Missing `tests` in an older backup is treated as an empty mock-test list. JSON exports from the new app keep the old `{ topics, settings, tests }` format.
 
-See [HOSTING.md](HOSTING.md) for the recommended Atlas and API setup, cost ranges, owner account creation, and the API URL needed for an online APK. See also [the hosting research report](../reports/Study%20Planner%20Cloud%20Hosting.md) for the provider comparison and source links.
+See [HOSTING.md](HOSTING.md) for the Vercel Hobby and Atlas Free setup, their current limits, owner account creation, and the API URL needed for an online APK. See also [the hosting research report](../reports/Study%20Planner%20Cloud%20Hosting.md) for the provider comparison and source links.
 
 ## Mobile project
 
-The React Native app is in `mobile/`. Set the public API URL at build time with `-PAPI_BASE_URL=https://your-api-host`; the placeholder URL does not connect to a real service.
+The React Native app is in `mobile/`. Set the public API URL at build time with `-PAPI_BASE_URL=https://your-project.vercel.app/api/server`; replace the example host with your deployed project. The placeholder URL does not connect to a real service.
 
 The generated React Native 0.88.1 Android template uses minSdk 24, compileSdk 37, build tools 37, and targetSdk 36. React Native recommends JDK 17. Its installed package engines accept Node `^22.13.0`, `^24.3.0`, or `>=26.0.0`; Node 25 is outside that range. The bundled Node 24.22.1 runtime was used to install dependencies.
 

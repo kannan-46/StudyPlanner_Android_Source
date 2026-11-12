@@ -45,7 +45,7 @@ npm run build
 npm run verify:vercel
 ```
 
-The verifier checks both HTTP routes and the authenticated WebSocket connection. Do not proceed to a real APK build if the verifier reports a route or handshake failure. The project root must be linked because Vercel Dev uses the linked project configuration. No billing or paid feature is required for this local check.
+The Vercel routing rules send `/api/server/*` to the shared function and strip the prefix before Express or Socket.IO handles the request. The verifier checks both HTTP routes and the authenticated WebSocket connection. Do not proceed to a real APK build if the verifier reports a route or handshake failure. The project root must be linked because Vercel Dev uses the linked project configuration. No billing or paid feature is required for this local check.
 
 ## 4. Create the first owner account
 
