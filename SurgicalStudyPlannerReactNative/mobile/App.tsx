@@ -140,8 +140,9 @@ function PlannerSession({
       setLive(false);
       return;
     }
+    const socketPath = `${new URL(API_BASE_URL).pathname.replace(/\/+$/, '')}/socket.io`;
     const socket = io(API_BASE_URL, {
-      path: '/socket.io',
+      path: socketPath,
       transports: ['websocket'],
       auth: {token},
       reconnection: true,
