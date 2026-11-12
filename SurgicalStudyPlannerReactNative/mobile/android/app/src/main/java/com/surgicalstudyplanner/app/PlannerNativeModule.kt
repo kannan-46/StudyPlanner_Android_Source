@@ -73,14 +73,14 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
     @ReactMethod
     fun requestExactAlarmAccess(promise: Promise) = runWithPromise(promise) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AlarmStore.canExact(reactApplicationContext)) {
-            val activity = currentActivity ?: throw IllegalStateException("The app is not in the foreground.")
+            val activity = reactApplicationContext.currentActivity ?: throw IllegalStateException("The app is not in the foreground.")
             val intent = Intent(
                 Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                 Uri.parse("package:${reactApplicationContext.packageName}"),
             )
             activity.startActivity(intent)
         } else {
-            currentActivity?.let {
+            reactApplicationContext.currentActivity?.let {
                 Toast.makeText(it, "Exact alarm access is already available", Toast.LENGTH_SHORT).show()
             }
         }
@@ -93,7 +93,7 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
             promise.reject("E_IN_PROGRESS", "Another backup file operation is already open.")
             return
         }
-        val activity = currentActivity
+        val activity = reactApplicationContext.currentActivity
         if (activity == null) {
             promise.reject("E_NO_ACTIVITY", "The app is not in the foreground.")
             return
@@ -121,7 +121,7 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
             promise.reject("E_IN_PROGRESS", "Another backup file operation is already open.")
             return
         }
-        val activity = currentActivity
+        val activity = reactApplicationContext.currentActivity
         if (activity == null) {
             promise.reject("E_NO_ACTIVITY", "The app is not in the foreground.")
             return
