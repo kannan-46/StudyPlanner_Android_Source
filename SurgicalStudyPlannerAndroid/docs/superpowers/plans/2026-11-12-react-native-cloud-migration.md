@@ -64,6 +64,7 @@
 - Create: `SurgicalStudyPlannerReactNative/server/src/realtime.ts`
 - Create: `SurgicalStudyPlannerReactNative/server/src/create-owner.ts`
 - Create: `SurgicalStudyPlannerReactNative/server/.env.example`
+- Create: `SurgicalStudyPlannerReactNative/server/src/planner-schema.ts`, `src/tokens.ts`, and `src/types.ts`
 
 **Interfaces:**
 - `POST /v1/auth/register` accepts `{ email, password }` but is disabled by default; `POST /v1/auth/login` accepts the same shape and returns `{ token, user: { id, email } }`.
@@ -75,13 +76,13 @@
 - MongoDB stores a unique normalized email per user and one private planner record keyed by that user ID; no route accepts a client-supplied owner ID.
 - Server settings are read from `MONGODB_URI`, `JWT_SECRET`, `PORT`, and `ALLOW_REGISTRATION` (false by default); none are returned to the mobile client except the registration-enabled boolean.
 
-- [ ] Implement login and gated registration with password hashing, signed expiring tokens, input validation, and generic authentication errors; add a server-side command to create the initial owner account.
-- [ ] Implement MongoDB connection, unique normalized user emails, and one versioned private planner document per user; enforce authenticated user scope in every planner route.
-- [ ] Implement version checks so concurrent updates return `409` instead of silently overwriting a newer planner document.
-- [ ] Implement authenticated Socket.IO rooms and publish `planner:changed` after successful API writes.
-- [ ] Add server setup, environment variable, HTTPS deployment, and Atlas network access instructions to the README.
-- [ ] Run the server TypeScript build; do not deploy it or provision Atlas resources in this task.
-- [ ] Commit Task 2 changes with `git add SurgicalStudyPlannerReactNative/server SurgicalStudyPlannerReactNative/README.md` and `git commit -m "feat: add authenticated MongoDB API"`.
+- [x] Implement login and gated registration with password hashing, signed expiring tokens, input validation, and generic authentication errors; add a server-side command to create the initial owner account.
+- [x] Implement MongoDB connection, unique normalized user emails, and one versioned private planner document per user; enforce authenticated user scope in every planner route.
+- [x] Implement version checks so concurrent updates return `409` instead of silently overwriting a newer planner document.
+- [x] Implement authenticated Socket.IO rooms and publish `planner:changed` after successful API writes.
+- [x] Add server setup, environment variable, HTTPS deployment, and Atlas network access instructions to the README.
+- [x] Run the server TypeScript build; do not deploy it or provision Atlas resources in this task.
+- [x] Commit Task 2 changes with `git add SurgicalStudyPlannerReactNative/server SurgicalStudyPlannerReactNative/README.md SurgicalStudyPlannerAndroid/docs/superpowers/plans/2026-11-12-react-native-cloud-migration.md` and `git commit -m "feat: add authenticated MongoDB API"`.
 
 ### Task 3: Preserve native Android alarm and backup functions
 
