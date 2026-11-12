@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {Alert, StyleSheet, Switch, View} from 'react-native';
 import {getPlannerNative} from '../planner/nativeAlarms';
 import {importPlannerBackup, exportPlannerBackup, BackupError} from '../backup/backup';
-import {DEFAULT_SETTINGS, type PlannerDocument, type PlannerDraft, type PlannerSettings} from '../types/planner';
+import {type PlannerDocument, type PlannerDraft, type PlannerSettings} from '../types/planner';
 import {PickerField} from '../ui/PickerField';
 import type {Theme} from '../ui/theme';
 import {BodyText, Button, Card, Field, Heading, MutedText, Notice, Page} from '../ui/components';
