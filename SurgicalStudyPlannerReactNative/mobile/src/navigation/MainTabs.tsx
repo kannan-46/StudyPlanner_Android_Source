@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {MockTest, PlannerDocument, PlannerSettings, Topic} from '../types/planner';
+import type {MockTest, PlannerDocument, PlannerDraft, PlannerSettings, Topic} from '../types/planner';
 import type {Theme} from '../ui/theme';
 import {HomeScreen, type TabName} from '../screens/HomeScreen';
 import {TopicsScreen} from '../screens/TopicsScreen';
@@ -30,6 +30,7 @@ export function MainTabs({
   onAddMockTest,
   onDeleteMockTest,
   onSaveSettings,
+  onImportBackup,
   onResetPlanner,
   onSignOut,
 }: {
@@ -46,6 +47,7 @@ export function MainTabs({
   onAddMockTest: (test: MockTest) => Promise<void>;
   onDeleteMockTest: (id: string) => Promise<void>;
   onSaveSettings: (settings: PlannerSettings) => Promise<void>;
+  onImportBackup: (backup: PlannerDraft) => Promise<void>;
   onResetPlanner: () => Promise<void>;
   onSignOut: () => Promise<void>;
 }) {
@@ -91,6 +93,7 @@ export function MainTabs({
             saving={saving}
             canEdit={canEdit}
             onSaveSettings={onSaveSettings}
+            onImportBackup={onImportBackup}
             onResetPlanner={onResetPlanner}
             onSignOut={onSignOut}
           />

@@ -135,16 +135,18 @@
 **Files:**
 - Create: `mobile/src/backup/backup.ts`
 - Modify: `mobile/src/screens/SettingsScreen.tsx`
+- Modify: `mobile/src/navigation/MainTabs.tsx` and `mobile/App.tsx` to upload a confirmed, validated import through the authenticated save flow.
 - Modify: `server/src/planner.ts` only if a dedicated import validation path is needed.
 
 **Interfaces:**
 - `exportPlannerBackup(planner): Promise<void>` serializes the signed-in user's current planner to JSON and passes it to the native document picker.
 - `importPlannerBackup(): Promise<PlannerDocument>` opens a JSON file, validates its shape, uploads it to the authenticated API with the current expected version, then refreshes alarms.
 
-- [ ] Match the current backup shape `{ topics, settings, tests }`; accept missing `tests` as an empty list for older backups.
-- [ ] Validate topics, revision dates, settings, and test scores before upload; reject malformed input without modifying cloud data.
-- [ ] Ensure imported data is saved to the signed-in account and all pending local alarms are rebuilt after the API confirms success.
-- [ ] Commit Task 5 changes with `git add SurgicalStudyPlannerReactNative/mobile/src SurgicalStudyPlannerReactNative/server/src/planner.ts` and `git commit -m "feat: migrate planner data with JSON backups"`.
+- [x] Match the current backup shape `{ topics, settings, tests }`; accept missing `tests` as an empty list for older backups.
+- [x] Validate topics, revision dates, settings, and test scores before upload; reject malformed input without modifying cloud data.
+- [x] Ensure imported data is saved to the signed-in account and all pending local alarms are rebuilt after the API confirms success.
+- [x] Run the mobile TypeScript no-emit build; do not add or run automated tests.
+- [x] Commit Task 5 changes with `git add SurgicalStudyPlannerReactNative/mobile/src SurgicalStudyPlannerReactNative/mobile/App.tsx SurgicalStudyPlannerReactNative/mobile/android/app/src/main/java/com/surgicalstudyplanner/app/PlannerNativeModule.kt SurgicalStudyPlannerReactNative/README.md SurgicalStudyPlannerAndroid/docs/superpowers/plans/2026-11-12-react-native-cloud-migration.md` and `git commit -m "feat: migrate planner data with JSON backups"`.
 
 ### Task 6: Configure the API endpoint and produce the downloadable APK
 

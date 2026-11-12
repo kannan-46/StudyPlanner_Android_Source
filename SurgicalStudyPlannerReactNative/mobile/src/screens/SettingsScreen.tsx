@@ -1,7 +1,8 @@
 import React, {useEffect, useState} from 'react';
 import {Alert, StyleSheet, Switch, View} from 'react-native';
 import {getPlannerNative} from '../planner/nativeAlarms';
-import {DEFAULT_SETTINGS, type PlannerDocument, type PlannerSettings} from '../types/planner';
+import {importPlannerBackup, exportPlannerBackup, BackupError} from '../backup/backup';
+import {DEFAULT_SETTINGS, type PlannerDocument, type PlannerDraft, type PlannerSettings} from '../types/planner';
 import {PickerField} from '../ui/PickerField';
 import type {Theme} from '../ui/theme';
 import {BodyText, Button, Card, Field, Heading, MutedText, Notice, Page} from '../ui/components';
@@ -13,6 +14,7 @@ export function SettingsScreen({
   saving,
   canEdit,
   onSaveSettings,
+  onImportBackup,
   onResetPlanner,
   onSignOut,
 }: {
@@ -22,6 +24,7 @@ export function SettingsScreen({
   saving: boolean;
   canEdit: boolean;
   onSaveSettings: (settings: PlannerSettings) => Promise<void>;
+  onImportBackup: (backup: PlannerDraft) => Promise<void>;
   onResetPlanner: () => Promise<void>;
   onSignOut: () => Promise<void>;
 }) {
@@ -30,6 +33,9 @@ export function SettingsScreen({
   const [dark, setDark] = useState(planner.settings.dark);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
 
   useEffect(() => {
     setIntervals(planner.settings.intervals.join(','));
@@ -80,6 +86,61 @@ export function SettingsScreen({
     ]);
   };
 
+  const exportBackup = async () => {
+    setBackupError(null);
+    setBackupNotice(null);
+    setBackupBusy(true);
+    try {
+      await exportPlannerBackup(planner);
+      setBackupNotice('Backup saved as JSON.');
+    } catch (backupSaveError) {
+      if (!isPickerCancelled(backupSaveError)) {
+        setBackupError(backupSaveError instanceof Error ? backupSaveError.message : 'Could not export this backup.');
+      }
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const importBackup = async () => {
+    setBackupError(null);
+    setBackupNotice(null);
+    setBackupBusy(true);
+    try {
+      const backup = await importPlannerBackup();
+      setBackupBusy(false);
+      Alert.alert(
+        'Replace this account’s planner?',
+        `This backup contains ${backup.topics.length} topic(s) and ${backup.mockTests.length} mock test(s). It will replace the planner currently stored in this account.`,
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Replace planner', style: 'destructive', onPress: () => void applyImport(backup)},
+        ],
+      );
+    } catch (backupLoadError) {
+      if (!isPickerCancelled(backupLoadError)) {
+        setBackupError(backupLoadError instanceof BackupError || backupLoadError instanceof Error
+          ? backupLoadError.message
+          : 'Could not import this backup.');
+      }
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const applyImport = async (backup: PlannerDraft) => {
+    setBackupError(null);
+    setBackupBusy(true);
+    try {
+      await onImportBackup(backup);
+      setBackupNotice('Backup imported and saved to your cloud account. Android reminders were refreshed.');
+    } catch (backupSaveError) {
+      setBackupError(backupSaveError instanceof Error ? backupSaveError.message : 'Could not save the imported backup.');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   return (
     <Page theme={theme}>
       <View>
@@ -118,6 +179,14 @@ export function SettingsScreen({
         <Button theme={theme} kind="secondary" label="Enable reliable alarms" onPress={() => void requestExactAlarms()} />
       </Card>
       <Card theme={theme}>
+        <Heading theme={theme}>Backup and migration</Heading>
+        <MutedText theme={theme}>Export a JSON copy, or import the backup from the original app. Import replaces this account’s current planner.</MutedText>
+        {backupError ? <Notice theme={theme} danger>{backupError}</Notice> : null}
+        {backupNotice ? <Notice theme={theme}>{backupNotice}</Notice> : null}
+        <Button theme={theme} kind="secondary" label="Export JSON backup" busy={backupBusy} disabled={!canEdit} onPress={() => void exportBackup()} />
+        <Button theme={theme} kind="secondary" label="Import JSON backup" busy={backupBusy} disabled={!canEdit} onPress={() => void importBackup()} />
+      </Card>
+      <Card theme={theme}>
         <Heading theme={theme}>Account actions</Heading>
         <Button theme={theme} kind="secondary" label="Sign out" disabled={saving} onPress={signOut} />
         <Button theme={theme} kind="danger" label="Delete all planner data" disabled={saving || !canEdit} onPress={reset} />
@@ -125,6 +194,10 @@ export function SettingsScreen({
       <MutedText theme={theme} style={styles.footer}>Surgical Study Planner · Version 3.0</MutedText>
     </Page>
   );
+}
+
+function isPickerCancelled(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'E_CANCELLED';
 }
 
 const styles = StyleSheet.create({

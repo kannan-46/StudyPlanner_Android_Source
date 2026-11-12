@@ -146,7 +146,7 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
         val uri = data?.data
         if (resultCode != Activity.RESULT_OK || uri == null) {
             currentExportJson = null
-            promise.resolve(null)
+            promise.reject("E_CANCELLED", "Backup export was cancelled.")
             return
         }
 

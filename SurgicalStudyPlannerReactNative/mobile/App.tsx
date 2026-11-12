@@ -266,6 +266,8 @@ function PlannerSession({
 
   const saveSettings = async (settings: PlannerSettings) => commit(current => ({...current, settings}));
 
+  const importBackup = async (backup: PlannerDraft) => commit(() => backup);
+
   const resetPlanner = async () => {
     try {
       await commit(() => ({
@@ -328,6 +330,7 @@ function PlannerSession({
           onAddMockTest={addMockTest}
           onDeleteMockTest={deleteMockTest}
           onSaveSettings={saveSettings}
+          onImportBackup={importBackup}
           onResetPlanner={resetPlanner}
           onSignOut={onSignOut}
         />
