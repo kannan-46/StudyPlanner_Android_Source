@@ -31,9 +31,11 @@ The app is online-only for planner data. The app talks to the API over HTTPS. Do
 
 The sign-in token is kept in Android's secure credential storage. Planner records are fetched from the API and kept in app memory only while the app is open; planner screens require a working API connection. Android keeps only the alarm schedule needed for reminders while the app is closed, and clears scheduled alarms when the user signs out.
 
-Only one owner account is intended for the first release. User records are separated by account from the start; public registration can be enabled later. Live updates are delivered to active app sessions. A closed app refreshes from the API when it opens again.
+Only one owner account is intended for the first release. User records are separated by account from the start; public registration stays disabled until invitation or verified registration and password recovery are ready. Live updates are delivered to active app sessions. A closed app refreshes from the API when it opens again.
 
 Before switching from the existing app, export its JSON backup from the old app's Settings screen and keep the file. After the new app has a hosted API and you sign in, open Settings → Import JSON backup. The importer validates the file before asking to replace that account's current planner. Missing `tests` in an older backup is treated as an empty mock-test list. JSON exports from the new app keep the old `{ topics, settings, tests }` format.
+
+See [HOSTING.md](HOSTING.md) for the recommended Atlas and API setup, cost ranges, owner account creation, and the API URL needed for an online APK. See also [the hosting research report](../reports/Study%20Planner%20Cloud%20Hosting.md) for the provider comparison and source links.
 
 ## Mobile project
 

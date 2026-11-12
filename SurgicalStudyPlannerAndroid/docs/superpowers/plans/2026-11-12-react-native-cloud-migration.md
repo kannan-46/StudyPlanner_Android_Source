@@ -148,17 +148,32 @@
 - [x] Run the mobile TypeScript no-emit build; do not add or run automated tests.
 - [x] Commit Task 5 changes with `git add SurgicalStudyPlannerReactNative/mobile/src SurgicalStudyPlannerReactNative/mobile/App.tsx SurgicalStudyPlannerReactNative/mobile/android/app/src/main/java/com/surgicalstudyplanner/app/PlannerNativeModule.kt SurgicalStudyPlannerReactNative/README.md SurgicalStudyPlannerAndroid/docs/superpowers/plans/2026-11-12-react-native-cloud-migration.md` and `git commit -m "feat: migrate planner data with JSON backups"`.
 
-### Task 6: Configure the API endpoint and produce the downloadable APK
+### Task 6: Document cloud hosting and release setup
 
 **Files:**
-- Modify: `mobile/android/app/build.gradle` or the generated React Native equivalent for a configurable API URL.
-- Modify: project READMEs with Atlas, backend hosting, and APK install instructions.
+- Create: `SurgicalStudyPlannerReactNative/HOSTING.md` with Atlas, Railway, owner account, multi-user, and APK setup instructions.
+- Modify: `SurgicalStudyPlannerReactNative/README.md` to link hosting guidance.
+- Create: `reports/Study Planner Cloud Hosting.md` with a cited provider comparison and recommendation.
 
 **Interfaces:**
-- Debug APK output: `mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
-- The APK uses the configured HTTPS API URL; no Atlas credentials are compiled into it.
+- The API host supplies a public HTTPS base URL for `API_BASE_URL` at build time.
+- Atlas credentials and `JWT_SECRET` stay on the backend host; they are never compiled into the APK.
 
-- [ ] Document required Atlas and API environment variables, creation of the initial owner account, how to enable additional private accounts later, API hosting configuration, and the API URL value needed for a usable APK.
-- [ ] Build the debug APK after configuring an API URL; check package ID, version code, and output file.
-- [ ] Report whether the artifact is pointed at a real hosted API or a development placeholder; do not claim cloud login or sync is operational without a configured endpoint and credentials.
-- [ ] Commit Task 6 documentation/config changes with `git add SurgicalStudyPlannerReactNative` and `git commit -m "build: document and package Android APK"`.
+- [x] Document the recommended host and Atlas tier, current price ranges, secrets, Atlas allowlist, owner account creation, and future account onboarding.
+- [x] Compare the researched Railway, Render, and Cloud Run options with direct provider source links.
+- [x] Document the APK command, install path, package ID, version, and the need for a real hosted API URL.
+- [x] Commit Task 6 hosting guidance as a separate task commit.
+
+### Task 7: Build and deliver a cloud-connected debug APK
+
+**Files:**
+- Build output: `SurgicalStudyPlannerReactNative/mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
+- No source change is needed unless the selected API host requires a build configuration adjustment.
+
+**Prerequisites:**
+- The API is deployed and its real public HTTPS URL is known.
+- JDK 17 and Android SDK components for this React Native Android template are installed.
+
+- [ ] Build the debug APK with `-PAPI_BASE_URL=<real-https-api-url>`; check the package ID, version code, and output artifact.
+- [ ] Report that the artifact uses the real endpoint and whether API sign-in is ready; do not present a placeholder APK as cloud-connected.
+- [ ] Commit any Task 7 source/config changes separately from the APK artifact.
