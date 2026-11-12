@@ -9,6 +9,7 @@ const vercelEntrypoint = await readFile(new URL('../api/server.ts', import.meta.
 
 test('Vercel forwards the API suffix through the server function', () => {
   assert.equal(vercelConfig.framework, null);
+  assert.equal(vercelConfig.outputDirectory, 'public');
   assert.deepEqual(vercelConfig.routes, [
     {
       src: '/api/server/(?<path>.*)',
