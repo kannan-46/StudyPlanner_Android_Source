@@ -1,79 +1,78 @@
-# Hosting setup for the planner
+# Free hosting setup: Vercel + MongoDB Atlas
 
-This guide describes a first live deployment for one owner, with a path to private multi-user accounts later. It does not create cloud accounts or deploy services. Prices below were checked on 12 November 2026; check the provider dashboards before choosing a plan.
+This guide sets up the API on Vercel Hobby and the database on an Atlas Free cluster. It is intended for one personal, non-commercial app owner. Both providers can change their free limits or terms, so this is a $0 setup while it stays within the providers' current free allowances, not a lifetime price guarantee. Vercel Hobby is limited to personal, non-commercial projects; see [Vercel Hobby](https://vercel.com/docs/plans/hobby) and [Vercel's terms](https://vercel.com/legal/terms).
 
-## Recommended first setup
+The backend and APK are not deployed or ready for online use by this repository alone. You must create the accounts, add the server secrets, deploy the API, and build with your project's real URL. Never put the Atlas URI or JWT secret in the Android app.
 
-Use one Node.js API service on Railway Pro and MongoDB Atlas Flex. Railway's $20/month subscription is credited toward resource usage and provides a stable outbound IPv4 address that Atlas can allowlist. Atlas Flex currently costs $8–$30 per 30 days and keeps one daily snapshot for eight days. This puts the starting spend at roughly $28–$50 per month before tax and any use above included Railway credit. The alternatives and tradeoffs are in [the hosting research report](../reports/Study%20Planner%20Cloud%20Hosting.md).
+## 1. Create the Atlas database
 
-Use Atlas Free while learning or validating deployment, but keep regular JSON exports and expect pauses after prolonged inactivity. Move to Flex when the owner relies on the planner and wants automatic daily snapshots. Flex does not include point-in-time restore or the uptime SLA documented for Atlas M10 and larger dedicated clusters.
+1. Create a MongoDB Atlas account and a project, then create an **Atlas Free** cluster. Pick a region near the expected users if one is available on the Free tier. Free clusters currently have a hard **512 MB** total storage limit for data and indexes and limited throughput. See [Atlas Free cluster limits](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/) and [cluster tiers](https://www.mongodb.com/docs/atlas/manage-clusters/).
+2. Create a database user with a unique, strong password and read/write access only to the `surgical_study_planner` database. Do not reuse your Atlas account password.
+3. In **Network Access**, add `0.0.0.0/0`. Vercel Hobby does not give this project a fixed outbound IP to put on a narrow Atlas list. This permits connections from any IP, so the database remains protected by TLS, the long unique database password, and the database user's restricted role. The URI must stay in Vercel's server environment variables; never put it in this repository or APK.
+4. Copy Atlas's `mongodb+srv://` connection string. Replace its placeholders, set the database path to `surgical_study_planner`, and URL-encode special characters in the database password. Keep a private copy for the next steps.
 
-The data flow is:
+Atlas Free clusters are automatically paused after 30 days without activity. A successful app launch fetches planner data through the API and accesses Atlas, which counts as activity. If Atlas has already paused the cluster, requests cannot connect until you resume it in Atlas. See [Atlas pause and resume behavior](https://www.mongodb.com/docs/atlas/pause-terminate-cluster/).
 
-```text
-Android app -- HTTPS / Socket.IO --> Railway API -- TLS + allowlisted IP --> MongoDB Atlas
-```
+## 2. Create a Vercel Hobby project
 
-The Android app contains the API's public HTTPS address only. Keep the MongoDB connection string and JWT signing secret on the API host. The API uses one least-privilege Atlas database user and scopes every planner operation to the signed-in app account.
+1. Create a Vercel account and choose the **Hobby** plan. Keep the project on Hobby and do not enable paid add-ons. Hobby is for personal, non-commercial use. Included usage is limited; exceeding limits can make a service unavailable until usage resets or the plan changes. See [Hobby limits](https://vercel.com/docs/plans/hobby) and [pricing](https://vercel.com/pricing).
+2. Import the Git repository containing this app. In project setup, set **Root Directory** to `SurgicalStudyPlannerReactNative/server` (select the directory within the repository). Use the default Node.js runtime, currently Node.js 24.x on Vercel. The server package requires Node.js 22.13 or newer.
+3. In the project's **Settings → Environment Variables**, add these variables for Production and Preview only when needed:
 
-## Create and restrict the Atlas database
-
-1. Create a MongoDB Atlas project and a cluster. Choose Flex for the first live planner if daily backups matter; choose Free only for a trial. Select the nearest region that Atlas offers for that tier. Confirm region and price in the cluster creation screen because Free and Flex are not available in every listed region.
-2. Create an Atlas **database user** for this app. Give it read/write access only to the `surgical_study_planner` database. This is different from the Atlas website login.
-3. In Atlas **Network Access**, add the static outbound IPv4 address shown for the Railway service after its region is selected. Use the narrowest address rule available. Do not add `0.0.0.0/0`.
-4. Copy the Atlas connection string and replace its username/password placeholders. Keep special characters in the password URL-encoded. The database name belongs in the URI path, for example `/surgical_study_planner`.
-
-Atlas Free and Flex use public TLS connections and do not provide private endpoints. Railway's static outbound address gives Atlas a narrow allowlist entry; the address is shared with other Railway customers, so the database password, TLS, least privilege, and API authentication still matter.
-
-## Deploy the API on Railway
-
-1. Put this repository in a private GitHub repository and connect that repository to a new Railway project. Select the repository folder `SurgicalStudyPlannerReactNative/server` as the service root directory.
-2. Choose the Singapore region as the starting API location, then enable the service's static outbound IPv4 address. Add that address to the Atlas project IP access list as described above. Confirm whether Atlas offers a nearby cluster region for the chosen tier; use the same cloud region when practical.
-3. Configure the service to use Node.js 22.13 or newer. Set the build command to `npm ci --include=dev && npm run build` and the start command to `npm start`.
-4. Add these service variables in Railway's dashboard. Never commit real values or copy them into the mobile folder.
-
-   | Variable | Value |
+   | Name | Value |
    | --- | --- |
-   | `MONGODB_URI` | Atlas connection string for `surgical_study_planner` |
-   | `JWT_SECRET` | A private random secret, at least 32 bytes |
+   | `MONGODB_URI` | The Atlas connection string from step 1 |
+   | `JWT_SECRET` | A private, random value of at least 32 bytes; use a different value from the Atlas password |
    | `ALLOW_REGISTRATION` | `false` |
-   | `TRUST_PROXY_HOPS` | Leave at `0` unless Railway's current proxy guidance confirms the trusted hop count for this service |
-   | `PORT` | Let Railway provide the port, unless its current service setup requires an explicit value |
 
-5. Deploy the service and generate a Railway public domain with HTTPS. Open `https://<your-domain>/health`; it should return `{"status":"ok"}`. This domain is the API base URL. Do not add `/v1` to the build-time base URL.
-6. Check Railway and Atlas logs for a successful database connection. Keep public registration disabled.
+   Do not add `PORT`. Leave `TRUST_PROXY_HOPS` unset unless deployment logs show the host requires a specific trusted proxy hop count. Never paste secrets into source files, Git, build commands, or the APK.
+4. Deploy the project. Vercel provides an HTTPS address such as `https://your-project.vercel.app`. This API is configured with the base path `https://your-project.vercel.app/api/server`.
 
-## Create the owner account
+Vercel currently supports WebSocket connections on Functions. This app uses Socket.IO for live updates. Each connection is limited by the function duration; this Function is configured for the Hobby maximum of five minutes, and the mobile client reconnects and reloads planner data. Without a shared Socket.IO adapter, a change may not reach sessions attached to another function instance. Reopening the app always fetches the latest planner from the API. See [Vercel WebSocket support](https://vercel.com/changelog/websocket-support-is-now-generally-available) and [Function duration limits](https://vercel.com/docs/functions/limitations).
 
-The API does not ship with a default account or password. Create the first owner once, after Atlas and the service variables are ready:
+## 3. Verify the deployment
 
-1. In Atlas Network Access, temporarily add your current public IP as a `/32` rule.
-2. From `SurgicalStudyPlannerReactNative/server`, copy `.env.example` to `.env` and set `MONGODB_URI` to the same Atlas URI and `JWT_SECRET` to a private random secret of at least 32 bytes. The local `.env` is ignored by Git. Do not share it or commit it.
-3. In an interactive PowerShell terminal, run `npm ci` and then `npm run create-owner`. Enter the owner's email and a unique password of at least 12 characters when prompted. The password is hidden in an interactive terminal.
-4. Remove the temporary `/32` rule from Atlas Network Access. Leave only the API service's outbound address.
-5. Open the app and sign in with this owner account.
+Check these URLs in a browser, replacing `your-project` with the Vercel project name:
 
-If owner creation fails, check the Atlas IP access list, database username/password, URL-encoding, and database name. Do not enable public registration as a workaround.
+- `https://your-project.vercel.app/api/server/health` should return `{"status":"ok"}`.
+- `https://your-project.vercel.app/api/server/v1/config` should return `{"registrationEnabled":false}`.
 
-## Build an APK that can connect
-
-A final cloud-connected APK cannot be built until the API has a real HTTPS domain. From the repository root, install the Android SDK components required by this project and JDK 17, then run in PowerShell:
+To check the authenticated Socket.IO handshake, link the Vercel project locally with the Vercel CLI from `SurgicalStudyPlannerReactNative/server/`, then run `npx vercel dev`. Set test-only `MONGODB_URI` and `JWT_SECRET` values in that shell before starting Vercel Dev; the verifier does not perform database operations. In a second terminal at `server/`, run:
 
 ```powershell
-cd SurgicalStudyPlannerReactNative\mobile\android
-.\gradlew.bat assembleDebug -PAPI_BASE_URL=https://your-service.up.railway.app
+npm ci
+npm run build
+npm run verify:vercel
 ```
 
-Replace `your-service.up.railway.app` with the actual Railway domain before building.
+The verifier checks both HTTP routes and the authenticated WebSocket connection. Do not proceed to a real APK build if the verifier reports a route or handshake failure. The project root must be linked because Vercel Dev uses the linked project configuration. No billing or paid feature is required for this local check.
 
-The APK is written to `SurgicalStudyPlannerReactNative/mobile/android/app/build/outputs/apk/debug/app-debug.apk`. It uses package ID `com.surgicalstudyplanner.app`, version code `3`, and version name `3.0.0`. Copy the APK to the Android phone and install it; Android may ask permission to install apps from that file source. This debug APK is suitable for sideloading and sharing for evaluation. A Play Store release needs a separately managed release signing key and a release build.
+## 4. Create the first owner account
 
-Do not ship an APK built with the placeholder `https://api.example.invalid` as if it were connected; login, cloud planner data, and live updates need the real API URL. The deployed API URL is public configuration, while Atlas credentials and the JWT secret remain server-only.
+The first account is created locally; public registration stays disabled. On a trusted computer, in `SurgicalStudyPlannerReactNative/server/`:
 
-## Add users and grow safely
+1. Copy `.env.example` to `.env` and fill in the real Atlas URI and a strong random `JWT_SECRET`. Keep `.env` untracked and private.
+2. Run `npm ci` and then `npm run create-owner`. Follow the prompt to enter the owner's email and a unique password of at least 12 characters. The API stores a password hash, not the plain password.
+3. Remove the local `.env` when finished, or keep it only in a trusted, encrypted development environment. Do not upload it to Vercel or commit it; the deployed API receives its own values through Vercel Environment Variables.
 
-The database already stores a separate planner per account, and the API derives ownership from the verified sign-in token. When additional people are ready, implement invitations or verified registration and password recovery before changing `ALLOW_REGISTRATION`. Do not create one Atlas database user per app user.
+If you later rotate `JWT_SECRET`, existing login sessions are invalidated and users must sign in again.
 
-Keep a single API process while Socket.IO uses in-memory rooms. If the API later runs multiple processes, add a shared Socket.IO adapter such as Redis so live change notices reach sessions connected to other processes. The app fetches planner data from the API on reconnect and foreground; Socket.IO carries update notices, not the durable planner itself.
+## 5. Build an APK for the deployed API
 
-Export planner JSON regularly and test a restore procedure. Atlas Flex retains daily snapshots for eight days, so changes made after the previous daily snapshot can still be lost. Revisit dedicated Atlas tiers if point-in-time restore, private networking, predictable dedicated capacity, or a documented uptime commitment becomes necessary.
+The URL is public and safe to compile into the APK; secrets are not. First copy the deployed API base URL exactly, including `/api/server`. From PowerShell:
+
+```powershell
+cd SurgicalStudyPlannerReactNative\mobile
+npm ci
+cd android
+.\gradlew.bat assembleDebug "-PAPI_BASE_URL=https://your-project.vercel.app/api/server"
+```
+
+The APK is written to `mobile/android/app/build/outputs/apk/debug/app-debug.apk`. Install that APK on an Android phone and sign in with the owner account. Planner data needs an internet connection. Local reminder alarms remain on-device; they do not require FCM. Reinstalling the app removes its locally scheduled alarms, while the planner record remains in Atlas.
+
+## Free-plan limits and service behavior
+
+- Atlas Free currently includes 512 MB for data plus indexes. It can pause after 30 days with no activity. Atlas may change the free tier or its limits.
+- Vercel Hobby is free for personal, non-commercial use with monthly usage limits. Do not add payment details, paid features, custom paid domains, static egress, paid keep-alive services, or paid realtime adapters for this setup.
+- Providers may change free terms, suspend inactive services, or discontinue free plans. No provider promises that this combination will remain free forever.
+- If the app becomes commercial, exceeds free limits, or requires reliable cross-instance realtime delivery, revisit the hosting plan before expanding usage.

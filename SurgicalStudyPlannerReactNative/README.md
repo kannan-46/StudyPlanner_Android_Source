@@ -6,7 +6,7 @@ This folder contains the React Native Android app and Node.js API. The existing 
 
 The API source is in `server/`. It uses TypeScript, Express, the official MongoDB Node.js driver, and Socket.IO. The API owns authentication and is the only component that connects to Atlas. Never put `MONGODB_URI` or `JWT_SECRET` in the mobile project or APK.
 
-For local development, install Node.js 24 LTS (or a supported Node.js release at least 22.13.0), create a MongoDB Atlas cluster and database user, then copy `server/.env.example` to `server/.env`. Set `MONGODB_URI` to the connection string, replace `JWT_SECRET` with a private random secret of at least 32 bytes, and keep `ALLOW_REGISTRATION=false`. The server selects the database from the connection string's path. Add only the API host's outbound IP addresses to the Atlas network access list; do not open the database to every IP address.
+For local development, install Node.js 24 LTS (or a supported Node.js release at least 22.13.0), create a MongoDB Atlas cluster and database user, then copy `server/.env.example` to `server/.env`. Set `MONGODB_URI` to the connection string, replace `JWT_SECRET` with a private random secret of at least 32 bytes, and keep `ALLOW_REGISTRATION=false`. The server selects the database from the connection string's path. For local development, allow your development computer's current IP in Atlas. For the Vercel Hobby setup, the guide explains the approved `0.0.0.0/0` setting needed because this project has no fixed outbound IP.
 
 Run the API locally from `server/`:
 
@@ -21,7 +21,7 @@ npm run dev
 
 The API endpoints are `POST /v1/auth/login`, `POST /v1/auth/register`, `GET /v1/config`, `GET /v1/planner`, and `PUT /v1/planner`. Planner saves require the version last fetched by the client. If another device saves first, the API returns `409 Conflict` so the app can reload before retrying. Signed-in sessions receive `planner:changed` Socket.IO events with the new version; planner contents are fetched over the authenticated API.
 
-For deployment, run the API on a host that provides a stable public HTTPS URL, set its secrets as host environment variables, and keep Atlas network access limited to that host. The API expects TLS to be provided by the host or its HTTPS reverse proxy. Set `TRUST_PROXY_HOPS` to the number of trusted proxies only when required by that host. The default Socket.IO adapter supports live updates among sessions connected to one API process; if the API is later scaled to multiple processes, configure a Socket.IO-compatible shared adapter such as Redis. Changes made directly in Atlas bypass API events and should be avoided.
+For the planned Vercel + Atlas Free deployment, see [HOSTING.md](HOSTING.md). The API expects TLS to be provided by the host or its HTTPS reverse proxy. Set `TRUST_PROXY_HOPS` only when required by that host. The default Socket.IO adapter supports live updates among sessions connected to one API process; if the API is later scaled to multiple processes, configure a Socket.IO-compatible shared adapter. Changes made directly in Atlas bypass API events and should be avoided.
 
 No database or hosting account is provisioned by this project. The API can be built and run locally, but phone sign-in requires a deployed API and a real HTTPS address.
 
