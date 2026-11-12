@@ -1,6 +1,6 @@
 import {NativeModules} from 'react-native';
 import type {PlannerDocument} from '../types/planner';
-import {allRevisions, localDateString} from './revisions';
+import {allRevisions} from './revisions';
 
 type PlannerNativeBridge = {
   cancelAllRevisionAlarms: () => Promise<void>;
@@ -27,13 +27,12 @@ export async function syncNativeAlarms(planner: PlannerDocument): Promise<void> 
   const [hourValue, minuteValue] = planner.settings.time.split(':').map(Number);
   const hour = Number.isInteger(hourValue) ? hourValue : 8;
   const minute = Number.isInteger(minuteValue) ? minuteValue : 0;
-  const today = localDateString();
   const now = Date.now();
   const pending = allRevisions(planner).filter(revision => !revision.done);
 
   await Promise.all(pending.map(revision => {
     const at = new Date(`${revision.date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`).getTime();
-    const triggerAt = revision.date <= today || at <= now ? now + 45_000 : at;
+    const triggerAt = at <= now ? now + 45_000 : at;
     return native.scheduleRevisionAlarm(
       `rev_${revision.topicId}_${revision.revisionIndex}`,
       triggerAt,
