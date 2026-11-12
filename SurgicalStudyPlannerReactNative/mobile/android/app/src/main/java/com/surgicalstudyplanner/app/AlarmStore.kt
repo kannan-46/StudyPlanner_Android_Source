@@ -57,6 +57,15 @@ object AlarmStore {
         prefs(context).edit().putString(KEY_REVISIONS, "[]").apply()
     }
 
+    fun clearAllAlarms(context: Context) {
+        cancelAllRevisions(context)
+        val dailyIntent = pending(context, DAILY_ID, true)
+        context.getSystemService(android.app.AlarmManager::class.java).cancel(dailyIntent)
+        dailyIntent.cancel()
+        prefs(context).edit().remove(KEY_DAILY).apply()
+        androidx.core.app.NotificationManagerCompat.from(context).cancelAll()
+    }
+
     private fun pending(context: Context, id: String, daily: Boolean): android.app.PendingIntent {
         val intent = Intent(context, RevisionAlarmReceiver::class.java).apply {
             action = if (daily) "com.surgicalstudyplanner.DAILY" else "com.surgicalstudyplanner.REVISION"

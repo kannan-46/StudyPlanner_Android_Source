@@ -94,7 +94,7 @@
 - Create or modify: `mobile/src/config/api.ts` only if the native configuration interface needs adjustment.
 
 **Interfaces:**
-- Native module methods: `cancelAllRevisionAlarms(): Promise<void>`, `scheduleRevisionAlarm(id, atMillis, title, body): Promise<void>`, `scheduleDailyReminder(hour, minute, pendingCount): Promise<void>`, `requestExactAlarmAccess(): Promise<void>`, `exportBackup(json): Promise<void>`, and `importBackup(): Promise<string>`.
+- Native module methods: `cancelAllRevisionAlarms(): Promise<void>`, `clearAllAlarms(): Promise<void>`, `scheduleRevisionAlarm(id, atMillis, title, body): Promise<void>`, `scheduleDailyReminder(hour, minute, pendingCount): Promise<void>`, `requestExactAlarmAccess(): Promise<void>`, `exportBackup(json): Promise<void>`, and `importBackup(): Promise<string>`.
 - The existing `RevisionAlarmReceiver` and `BootReceiver` behavior remains native and can restore future schedules from `SharedPreferences` without launching React Native.
 
 - [x] Adapt the current `AlarmStore` to a React Native native module without changing notification content, exact/inexact fallback, daily reminder recurrence, or reboot recovery.
@@ -108,22 +108,27 @@
 **Files:**
 - Create: `mobile/src/api/client.ts`
 - Create: `mobile/src/auth/AuthContext.tsx`
+- Create: `mobile/src/components/TopicEditorModal.tsx`
 - Create: `mobile/src/navigation/` app navigation and tab routes.
 - Create: `mobile/src/screens/` sign-in, registration, Home, Topics, Schedule, Progress, and Settings screens.
 - Create: `mobile/src/types/planner.ts`
-- Create: `mobile/src/planner/` revision, validation, and alarm-sync helpers.
+- Create: `mobile/src/planner/` revision and alarm-sync helpers.
+- Create: `mobile/src/ui/` shared colors, fields, and components.
+- Modify: `mobile/App.tsx`, `mobile/package.json`, and lockfile.
+- Modify: native alarm module to clear pending reminders on sign-out.
 
 **Interfaces:**
 - API client methods: `register(email, password)`, `login(email, password)`, `getPlanner(token)`, and `savePlanner(token, planner, expectedVersion)`.
 - `syncNativeAlarms(planner: PlannerDocument): Promise<void>` cancels old revision alarms, schedules each incomplete revision at the selected reminder time, and schedules the daily reminder.
-- The app stores the session token using platform secure storage; planner data remains server-backed and in React state, with no offline editing or database cache.
+- The app stores the session token in Android secure credential storage; planner data remains server-backed and in React state, with no offline viewing, editing, or database cache.
 
-- [ ] Implement sign-in and conditionally show registration only when `/v1/config` enables it; show a connection error and retry action when the API is unavailable.
-- [ ] Recreate topic add/edit/delete, exam filter/search, completion, snooze, interval settings, dashboard counts, schedule, subject progress, mock-test tracking, dark mode, and Pomodoro timer.
-- [ ] Save edits through the authenticated API; refresh state after a `409` version conflict and show a clear message.
-- [ ] On sign-in, app foreground, and successful planner writes, fetch the latest document and refresh the local alarm schedule.
-- [ ] Connect authenticated Socket.IO sessions; on `planner:changed`, fetch the newest document and update both the UI and scheduled alarms.
-- [ ] Commit Task 4 changes with `git add SurgicalStudyPlannerReactNative/mobile/src SurgicalStudyPlannerReactNative/mobile/App.tsx` and `git commit -m "feat: add React Native planner experience"`.
+- [x] Implement sign-in and conditionally show registration only when `/v1/config` enables it; show a connection error and retry action when the API is unavailable.
+- [x] Recreate topic add/edit/delete, exam filter/search, completion, snooze, interval settings, dashboard counts, schedule, subject progress, mock-test tracking, dark mode, and Pomodoro timer.
+- [x] Save edits through the authenticated API; refresh state after a `409` version conflict and show a clear message.
+- [x] On sign-in, app foreground, and successful planner writes, fetch the latest document and refresh the local alarm schedule.
+- [x] Connect authenticated Socket.IO sessions; on `planner:changed`, fetch the newest document and update both the UI and scheduled alarms.
+- [x] Run TypeScript no-emit compilation and bundle the Android JavaScript with Metro; do not add or run automated tests.
+- [x] Commit Task 4 changes with `git add SurgicalStudyPlannerReactNative/mobile/App.tsx SurgicalStudyPlannerReactNative/mobile/src SurgicalStudyPlannerReactNative/mobile/package.json SurgicalStudyPlannerReactNative/mobile/package-lock.json SurgicalStudyPlannerReactNative/mobile/android/app/src/main/java/com/surgicalstudyplanner/app/AlarmStore.kt SurgicalStudyPlannerReactNative/mobile/android/app/src/main/java/com/surgicalstudyplanner/app/PlannerNativeModule.kt SurgicalStudyPlannerReactNative/README.md SurgicalStudyPlannerAndroid/docs/superpowers/plans/2026-11-12-react-native-cloud-migration.md` and `git commit -m "feat: add React Native planner experience"`.
 
 ### Task 5: Add old-app backup migration and JSON backups
 

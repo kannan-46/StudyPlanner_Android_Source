@@ -50,6 +50,12 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
     }
 
     @ReactMethod
+    fun clearAllAlarms(promise: Promise) = runWithPromise(promise) {
+        AlarmStore.clearAllAlarms(reactApplicationContext)
+        null
+    }
+
+    @ReactMethod
     fun scheduleRevisionAlarm(id: String, atMillis: Double, title: String, body: String, promise: Promise) =
         runWithPromise(promise) {
             require(id.isNotBlank()) { "Alarm ID must not be empty." }

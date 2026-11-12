@@ -29,13 +29,15 @@ No database or hosting account is provisioned by this project. The API can be bu
 
 The app is online-only for planner data. The app talks to the API over HTTPS. Do not put Atlas credentials in the Android app.
 
+The sign-in token is kept in Android's secure credential storage. Planner records are fetched from the API and kept in app memory only while the app is open; planner screens require a working API connection. Android keeps only the alarm schedule needed for reminders while the app is closed, and clears scheduled alarms when the user signs out.
+
 Only one owner account is intended for the first release. User records are separated by account from the start; public registration can be enabled later. Live updates are delivered to active app sessions. A closed app refreshes from the API when it opens again.
 
 Before switching from the existing app, export its JSON backup if its topics, settings, and mock-test scores need to move to the new app.
 
 ## Mobile project
 
-The React Native app is in `mobile/`. Set the public API URL at build time with `-PAPI_BASE_URL=https://your-api-host/...`; the placeholder URL does not connect to a real service.
+The React Native app is in `mobile/`. Set the public API URL at build time with `-PAPI_BASE_URL=https://your-api-host`; the placeholder URL does not connect to a real service.
 
 The generated React Native 0.88.1 Android template uses minSdk 24, compileSdk 37, build tools 37, and targetSdk 36. React Native recommends JDK 17. Its installed package engines accept Node `^22.13.0`, `^24.3.0`, or `>=26.0.0`; Node 25 is outside that range. The bundled Node 24.22.1 runtime was used to install dependencies.
 
