@@ -6,7 +6,7 @@
 
 Prepare the existing Node.js API for deployment on Vercel Hobby so the React Native app can use an HTTPS API and keep its MongoDB Atlas data when the app is removed or its cache is cleared. The app remains online-only for planner data. This choice follows the owner's preference for a $0 personal project and Vercel hosting.
 
-The owner requires that this app incur no hosting or service charges. Use only the free plans and features. The Vercel Hobby plan is currently free for personal, non-commercial use, but no provider promises lifetime-free terms. A future commercial release, changed quotas, or product changes may make this exact setup unavailable. Vercel's published Hobby plan currently includes a 300-second maximum function duration and pauses some usage after quotas are exceeded. [Hobby plan](https://vercel.com/docs/plans/hobby)
+The owner requires that this app incur no hosting or service charges. Use Vercel Hobby, MongoDB Atlas Free (formerly M0, currently 512 MB), and Vercel's provided HTTPS address; do not buy a custom domain. Do not enable paid backup or other add-ons. These services currently advertise free options, but no provider promises lifetime-free terms. Vercel Hobby is for personal, non-commercial use. A future commercial release, changed quotas, or product changes may make this exact setup unavailable. Vercel's published Hobby plan currently includes a 300-second maximum function duration and pauses some usage after quotas are exceeded. [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Atlas Free limits](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/)
 
 ## Existing system to preserve
 
@@ -27,6 +27,7 @@ The owner requires that this app incur no hosting or service charges. Use only t
 5. Read `MONGODB_URI`, `JWT_SECRET`, and `ALLOW_REGISTRATION` only from Vercel environment variables. Keep registration disabled. Never commit a real `.env`, MongoDB URI, or JWT secret.
 6. Keep local HTTP startup for development. Do not require an always-running process, background worker, scheduled task, or database credential in the mobile app.
 7. Configure the Vercel function in one region close to MongoDB Atlas where available, so database round trips do not cross regions unnecessarily. The owner supplies the actual Atlas URI and chooses the Atlas region/account; the implementation does not provision accounts or deploy without those credentials.
+8. Use the Atlas Free cluster only. Atlas currently pauses it after 30 days with no database connections. A normal app launch must fetch planner data from the API, causing a real database operation; do not rely on a health-only request or a paid keep-alive service. If the app is unused long enough for Atlas to pause, the owner can resume the cluster in the Atlas dashboard. [Atlas inactivity behavior](https://www.mongodb.com/docs/atlas/pause-terminate-cluster/)
 
 ## Realtime behavior and limits
 
