@@ -10,13 +10,31 @@ const client = new MongoClient(config.mongodbUri, {
 
 let database: Db | undefined;
 
-export async function connectDatabase(): Promise<void> {
+export function createMemoizedInitializer(initialize: () => Promise<void>): () => Promise<void> {
+  let initialization: Promise<void> | undefined;
+
+  return () => {
+    if (!initialization) {
+      initialization = initialize().catch((error: unknown) => {
+        initialization = undefined;
+        throw error;
+      });
+    }
+    return initialization;
+  };
+}
+
+const initializeDatabase = createMemoizedInitializer(async () => {
   await client.connect();
   database = client.db();
   await Promise.all([
     users().createIndex({ emailNormalized: 1 }, { unique: true, name: "unique_normalized_email" }),
     planners().createIndex({ userId: 1 }, { unique: true, name: "unique_planner_per_user" }),
   ]);
+});
+
+export function connectDatabase(): Promise<void> {
+  return initializeDatabase();
 }
 
 function getDatabase(): Db {

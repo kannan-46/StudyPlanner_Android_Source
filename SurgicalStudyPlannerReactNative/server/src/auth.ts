@@ -3,7 +3,7 @@ import { Router, type RequestHandler } from "express";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { config } from "./config.js";
-import { users } from "./db.js";
+import { connectDatabase, users } from "./db.js";
 import type { UserDocument } from "./types.js";
 import { createAccessToken, verifyAccessToken } from "./tokens.js";
 
@@ -71,7 +71,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
   }
 };
 
-export function createAuthRouter(): Router {
+export function createAuthRouter(ensureDatabaseConnected: () => Promise<void> = connectDatabase): Router {
   const router = Router();
 
   router.post("/register", async (req, res) => {
@@ -96,6 +96,7 @@ export function createAuthRouter(): Router {
     };
 
     try {
+      await ensureDatabaseConnected();
       await users().insertOne(newUser);
     } catch (error) {
       if (isDuplicateKey(error)) {
@@ -119,6 +120,7 @@ export function createAuthRouter(): Router {
     }
 
     const emailNormalized = parsed.data.email.trim().toLowerCase();
+    await ensureDatabaseConnected();
     const user = await users().findOne({ emailNormalized });
     const passwordMatches = user
       ? await verifyPassword(parsed.data.password, user.passwordHash)

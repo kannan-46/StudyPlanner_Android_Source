@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import type { Server } from "socket.io";
 import { ObjectId } from "mongodb";
-import { planners } from "./db.js";
+import { connectDatabase, planners } from "./db.js";
 import { defaultSettings, plannerWriteSchema } from "./planner-schema.js";
 import type { PlannerDbDocument, PlannerDocument } from "./types.js";
 
@@ -41,11 +41,16 @@ function toPlannerDocument(document: PlannerDbDocument): PlannerDocument {
   };
 }
 
-export function createPlannerRouter(io: Server, authenticated: RequestHandler): Router {
+export function createPlannerRouter(
+  io: Server,
+  authenticated: RequestHandler,
+  ensureDatabaseConnected: () => Promise<void> = connectDatabase,
+): Router {
   const router = Router();
   router.use(authenticated);
 
   router.get("/", async (req, res) => {
+    await ensureDatabaseConnected();
     const document = await ensurePlanner(new ObjectId(req.auth!.userId));
     res.json(toPlannerDocument(document));
   });
@@ -57,6 +62,7 @@ export function createPlannerRouter(io: Server, authenticated: RequestHandler): 
       return;
     }
 
+    await ensureDatabaseConnected();
     const userId = new ObjectId(req.auth!.userId);
     const collection = planners();
     const current = await ensurePlanner(userId);
