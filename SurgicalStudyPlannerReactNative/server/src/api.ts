@@ -10,12 +10,11 @@ import { createRealtimeServer } from "./realtime.js";
 import type { Server } from "socket.io";
 import type { Server as HttpServer } from "node:http";
 
-export function createApiServer(): {
+export function createApiServer(app: Express = express()): {
   app: Express;
   httpServer: HttpServer;
   io: Server;
 } {
-  const app = express();
   if (config.trustProxyHops > 0) app.set("trust proxy", config.trustProxyHops);
   app.disable("x-powered-by");
   app.use(helmet());

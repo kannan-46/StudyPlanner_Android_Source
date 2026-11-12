@@ -16,7 +16,7 @@ Atlas Free clusters are automatically paused after 30 days without activity. A s
 ## 2. Create a Vercel Hobby project
 
 1. Create a Vercel account and choose the **Hobby** plan. Keep the project on Hobby and do not enable paid add-ons. Hobby is for personal, non-commercial use. Included usage is limited; exceeding limits can make a service unavailable until usage resets or the plan changes. See [Hobby limits](https://vercel.com/docs/plans/hobby) and [pricing](https://vercel.com/pricing).
-2. Import the Git repository containing this app. In project setup, set **Root Directory** to `SurgicalStudyPlannerReactNative/server` (select the directory within the repository). Use the default Node.js runtime, currently Node.js 24.x on Vercel. The server package requires Node.js 22.13 or newer.
+2. Import the Git repository containing this app. In project setup, set **Root Directory** to `SurgicalStudyPlannerReactNative/server` (select the directory within the repository). `vercel.json` selects the **Other** framework preset to prevent Express auto-detection from picking the local development entrypoint; the `/api` function still runs on Vercel's Node.js runtime, currently Node.js 24.x by default. The server package requires Node.js 22.13 or newer.
 3. In the project's **Settings → Environment Variables**, add these variables for Production and Preview only when needed:
 
    | Name | Value |
