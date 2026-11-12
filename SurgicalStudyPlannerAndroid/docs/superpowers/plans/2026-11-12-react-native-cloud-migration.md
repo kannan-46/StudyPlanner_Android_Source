@@ -87,19 +87,21 @@
 ### Task 3: Preserve native Android alarm and backup functions
 
 **Files:**
-- Create or modify Kotlin files under `SurgicalStudyPlannerReactNative/mobile/android/app/src/main/java/com/surgicalstudyplanner/app/` for the React Native native module and package.
+- Create or modify Kotlin files under `SurgicalStudyPlannerReactNative/mobile/android/app/src/main/java/com/surgicalstudyplanner/app/` for the React Native native module, package, build configuration module, alarms, and receivers.
+- Modify: `mobile/android/app/src/main/java/com/surgicalstudyplanner/app/MainActivity.kt`
+- Modify: `mobile/android/app/src/main/java/com/surgicalstudyplanner/app/MainApplication.kt`
 - Create or modify: `mobile/android/app/src/main/AndroidManifest.xml`
-- Create or modify: `mobile/android/app/src/main/java/com/surgicalstudyplanner/app/AlarmStore.kt`
+- Create or modify: `mobile/src/config/api.ts` only if the native configuration interface needs adjustment.
 
 **Interfaces:**
 - Native module methods: `cancelAllRevisionAlarms(): Promise<void>`, `scheduleRevisionAlarm(id, atMillis, title, body): Promise<void>`, `scheduleDailyReminder(hour, minute, pendingCount): Promise<void>`, `requestExactAlarmAccess(): Promise<void>`, `exportBackup(json): Promise<void>`, and `importBackup(): Promise<string>`.
 - The existing `RevisionAlarmReceiver` and `BootReceiver` behavior remains native and can restore future schedules from `SharedPreferences` without launching React Native.
 
-- [ ] Adapt the current `AlarmStore` to a React Native native module without changing notification content, exact/inexact fallback, daily reminder recurrence, or reboot recovery.
-- [ ] Implement promise-based Android document picker flows for JSON export and import.
-- [ ] Request Android notification permission on supported Android versions and retain the exact-alarm settings screen flow.
-- [ ] Compile the Android module as part of the mobile debug build.
-- [ ] Commit Task 3 changes with `git add SurgicalStudyPlannerReactNative/mobile/android` and `git commit -m "feat: bridge Android alarms and backup"`.
+- [x] Adapt the current `AlarmStore` to a React Native native module without changing notification content, exact/inexact fallback, daily reminder recurrence, or reboot recovery.
+- [x] Implement promise-based Android document picker flows for JSON export and import.
+- [x] Request Android notification permission on supported Android versions and retain the exact-alarm settings screen flow.
+- [ ] Compile the Android module as part of the mobile debug build. The build was attempted, but this machine has no working JDK (`JAVA_HOME` is unset and `java.exe` fails); complete this when the Task 6 APK toolchain is available.
+- [x] Commit Task 3 changes with `git add SurgicalStudyPlannerReactNative/mobile/android SurgicalStudyPlannerAndroid/docs/superpowers/plans/2026-11-12-react-native-cloud-migration.md` and `git commit -m "feat: bridge Android alarms and backup"`.
 
 ### Task 4: Build React Native sign-in and planner screens
 
