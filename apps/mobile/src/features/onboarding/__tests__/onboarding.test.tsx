@@ -30,6 +30,19 @@ jest.mock('../../../native/reminders', () => ({
   openReminderSettings: jest.fn(),
   configureReminders: jest.fn().mockResolvedValue(undefined),
 }));
+let mockPickDate = new Date(2027, 0, 15);
+jest.mock('@react-native-community/datetimepicker', () => {
+  const { Pressable } = require('react-native');
+  const R = require('react');
+  return {
+    __esModule: true,
+    default: ({ onChange }: { onChange: (e: unknown, d: Date) => void }) =>
+      R.createElement(Pressable, {
+        testID: 'date-picker',
+        onPress: () => onChange({ type: 'set' }, mockPickDate),
+      }),
+  };
+});
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
   default: jest.fn(),
@@ -266,6 +279,106 @@ describe('TopicsStep', () => {
     await screen.findByText('Added: 0 topics');
     expect(screen.getByTestId('responsive-container').props.style).toEqual(
       expect.objectContaining({ maxWidth: 720 }),
+    );
+  });
+});
+
+describe('relaunch-safe setup', () => {
+  it('sends each exam its own date and none when untouched', async () => {
+    const http = makeHttp();
+    http.get.mockImplementation(async () => []);
+    http.post.mockResolvedValue({ id: 'e', name: 'x', examDate: null });
+    await renderStep('Exams', http);
+    await fireEvent.press(await screen.findByText('NEET SS'));
+    await fireEvent.press(screen.getByText('MS General Surgery'));
+    mockPickDate = new Date(2027, 0, 15);
+    await fireEvent.press(screen.getByText('Set date for NEET SS'));
+    await fireEvent.press(screen.getByTestId('date-picker'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(2));
+    expect(http.post).toHaveBeenCalledWith('/v1/exams', {
+      name: 'NEET SS',
+      examDate: '2027-01-15',
+    });
+    expect(http.post).toHaveBeenCalledWith('/v1/exams', {
+      name: 'MS General Surgery',
+    });
+  });
+
+  it('gives two exams different dates and PATCHes an existing one', async () => {
+    const http = makeHttp();
+    http.post.mockResolvedValue({ id: 'e', name: 'x', examDate: null });
+    http.patch.mockResolvedValue({});
+    await renderStep('Exams', http);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('checkbox', { name: 'MS General Surgery' }).props
+          .accessibilityState.checked,
+      ).toBe(true),
+    );
+    await fireEvent.press(screen.getByText('NEET SS'));
+    mockPickDate = new Date(2027, 0, 15);
+    await fireEvent.press(screen.getByText('Set date for NEET SS'));
+    await fireEvent.press(screen.getByTestId('date-picker'));
+    mockPickDate = new Date(2027, 5, 2);
+    await fireEvent.press(screen.getByText('Set date for MS General Surgery'));
+    await fireEvent.press(screen.getAllByTestId('date-picker')[0]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith(
+        '/v1/exams/000000000000000000000011',
+        {
+          examDate: '2027-06-02',
+        },
+      ),
+    );
+    expect(http.post).toHaveBeenCalledWith('/v1/exams', {
+      name: 'NEET SS',
+      examDate: '2027-01-15',
+    });
+  });
+
+  it('counts existing topics so Finish works after a relaunch', async () => {
+    await renderWithProviders(<TopicsStep />, makeHttp([topic()]));
+    expect(await screen.findByText('Added: 1 topic')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Finish' }).props.accessibilityState
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('ignores a second Finish press while pending', async () => {
+    const http = makeHttp([topic()]);
+    http.patch.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve({}), 30)),
+    );
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Added: 1 topic');
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
+    await fireEvent.press(screen.getByText('Skip for now'));
+    await waitFor(() => expect(refreshUser).toHaveBeenCalledTimes(1));
+    expect(http.patch).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults reminder settings from the user', async () => {
+    const http = makeHttp();
+    http.get.mockImplementation(async (p: string) =>
+      p === '/v1/me'
+        ? { settings: { reminderTime: '06:30', dailyReminder: false } }
+        : [],
+    );
+    http.patch.mockResolvedValue({});
+    await renderStep('Reminders', http);
+    await waitFor(() => expect(screen.getByText('06:30')).toBeOnTheScreen());
+    expect(screen.getByLabelText('Daily reminder').props.value).toBe(false);
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+        settings: expect.objectContaining({
+          reminderTime: '06:30',
+          dailyReminder: false,
+        }),
+      }),
     );
   });
 });

@@ -14,7 +14,7 @@ import {
   requestNotificationPermission,
   type ReminderStatus,
 } from '../../native/reminders';
-import { useUpdateMe } from '../me/hooks';
+import { useMe, useUpdateMe } from '../me/hooks';
 import { StepShell } from './StepShell';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -79,8 +79,11 @@ export function RemindersStep() {
   const { colors, radius, spacing } = useTheme();
   const navigation = useNavigation();
   const updateMe = useUpdateMe();
-  const [time, setTime] = useState('08:00');
-  const [enabled, setEnabled] = useState(true);
+  const meQ = useMe();
+  const [timeEdit, setTimeEdit] = useState<string | null>(null);
+  const [enabledEdit, setEnabledEdit] = useState<boolean | null>(null);
+  const time = timeEdit ?? meQ.data?.settings?.reminderTime ?? '08:00';
+  const enabled = enabledEdit ?? meQ.data?.settings?.dailyReminder ?? true;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [status, setStatus] = useState<ReminderStatus | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -154,7 +157,7 @@ export function RemindersStep() {
         <Switch
           accessibilityLabel="Daily reminder"
           value={enabled}
-          onValueChange={setEnabled}
+          onValueChange={setEnabledEdit}
         />
       </View>
       <Pressable
@@ -182,7 +185,7 @@ export function RemindersStep() {
           onChange={(e, d) => {
             setPickerOpen(Platform.OS === 'ios');
             if (e.type === 'set' && d) {
-              setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+              setTimeEdit(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
             }
           }}
         />

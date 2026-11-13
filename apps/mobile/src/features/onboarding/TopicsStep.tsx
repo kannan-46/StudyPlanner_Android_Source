@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from '../../shared/ui/Button';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { useUpdateMe } from '../me/hooks';
+import { useTopics } from '../topics/hooks';
 import { TopicForm } from '../topics/TopicForm';
 import { StepShell } from './StepShell';
 
@@ -12,11 +13,21 @@ export function TopicsStep() {
   const { colors, spacing } = useTheme();
   const { refreshUser } = useAuth();
   const updateMe = useUpdateMe();
+  const topicsQ = useTopics();
   const [added, setAdded] = useState(0);
+  // Topics that existed before this session (relaunch mid-setup).
+  const baseline = useRef<number | null>(null);
+  if (baseline.current === null && topicsQ.data) {
+    baseline.current = topicsQ.data.length - added;
+  }
+  const total = (baseline.current ?? 0) + added;
   const [error, setError] = useState<unknown>(null);
   const [finishing, setFinishing] = useState(false);
+  const busy = useRef(false);
 
   async function complete() {
+    if (busy.current) return;
+    busy.current = true;
     setError(null);
     setFinishing(true);
     try {
@@ -25,6 +36,7 @@ export function TopicsStep() {
     } catch (e) {
       setError(e);
     } finally {
+      busy.current = false;
       setFinishing(false);
     }
   }
@@ -38,7 +50,7 @@ export function TopicsStep() {
           marginBottom: spacing.md,
         }}
       >
-        {`Added: ${added} ${added === 1 ? 'topic' : 'topics'}`}
+        {`Added: ${total} ${total === 1 ? 'topic' : 'topics'}`}
       </Text>
       <TopicForm
         mode="create"
@@ -53,7 +65,7 @@ export function TopicsStep() {
           title="Finish"
           onPress={complete}
           loading={finishing}
-          disabled={added < 1}
+          disabled={total < 1 || finishing}
         />
         <Button
           title="Skip for now"

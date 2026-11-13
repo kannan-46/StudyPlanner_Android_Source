@@ -1,28 +1,83 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
-import { localToday, nameKey, type LocalDate } from '@planner/shared';
+import { nameKey, type LocalDate } from '@planner/shared';
 import { ApiError } from '../../shared/api/errors';
 import { Button } from '../../shared/ui/Button';
 import { ChipSelect } from '../../shared/ui/ChipSelect';
-import { DateField } from '../../shared/ui/DateField';
+import { fromLocalDate, toLocalDate } from '../../shared/ui/DateField';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { TextField } from '../../shared/ui/TextField';
 import { useTheme } from '../../shared/ui/ThemeProvider';
-import { useCreateExam, useExams } from '../exams/hooks';
+import { formatDate } from '../../shared/lib/format';
+import { useCreateExam, useExams, useUpdateExam } from '../exams/hooks';
 import { StepShell } from './StepShell';
 
 const QUICK_PICKS = ['NEET SS', 'MS General Surgery'];
 
-export function ExamStep() {
+/** Optional date for one exam; nothing is saved until the user picks one. */
+function ExamDateRow({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: LocalDate | null;
+  onChange: (d: LocalDate | null) => void;
+}) {
   const { colors, spacing } = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
+      }}
+    >
+      <Text style={{ color: colors.text, flexShrink: 1 }}>
+        {`${name} exam date (optional): ${value ? formatDate(value) : 'none'}`}
+      </Text>
+      <Button
+        title={value ? `Change date for ${name}` : `Set date for ${name}`}
+        variant="secondary"
+        onPress={() => setOpen(true)}
+      />
+      {value ? (
+        <Button
+          title={`Clear date for ${name}`}
+          variant="text"
+          onPress={() => onChange(null)}
+        />
+      ) : null}
+      {open ? (
+        <DateTimePicker
+          value={value ? fromLocalDate(value) : new Date()}
+          mode="date"
+          onChange={(e, d) => {
+            setOpen(Platform.OS === 'ios');
+            if (e.type === 'set' && d) onChange(toLocalDate(d));
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+export function ExamStep() {
+  const { spacing } = useTheme();
   const navigation = useNavigation();
   const examsQ = useExams();
   const createExam = useCreateExam();
+  const updateExam = useUpdateExam();
   const [selected, setSelected] = useState<string[]>([]);
   const [custom, setCustom] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
-  const [examDate, setExamDate] = useState<LocalDate | null>(null);
+  // Keyed by nameKey; undefined = untouched (existing exams keep their date).
+  const [dates, setDates] = useState<Record<string, LocalDate | null>>({});
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
   const preselected = useRef(false);
@@ -45,6 +100,12 @@ export function ExamStep() {
   ]) {
     if (!names.some(x => nameKey(x) === nameKey(n))) names.push(n);
   }
+  const existingFor = (name: string) =>
+    existing?.find(e => nameKey(e.name) === nameKey(name));
+  const dateFor = (name: string): LocalDate | null => {
+    const k = nameKey(name);
+    return k in dates ? dates[k] ?? null : existingFor(name)?.examDate ?? null;
+  };
 
   function addCustom() {
     const name = draft.trim().replace(/\s+/g, ' ');
@@ -59,12 +120,21 @@ export function ExamStep() {
     setError(null);
     setSaving(true);
     try {
-      const have = new Set((existing ?? []).map(e => nameKey(e.name)));
       for (const name of selected) {
-        if (have.has(nameKey(name))) continue;
+        const date = dateFor(name);
+        const have = existingFor(name);
+        if (have) {
+          if (nameKey(name) in dates && date !== have.examDate) {
+            await updateExam.mutateAsync({
+              id: have.id,
+              patch: { examDate: date },
+            });
+          }
+          continue;
+        }
         try {
           await createExam.mutateAsync(
-            examDate ? { name, examDate } : { name },
+            date ? { name, examDate: date } : { name },
           );
         } catch (e) {
           // Already exists (for example from an earlier attempt): fine.
@@ -103,31 +173,18 @@ export function ExamStep() {
           disabled={!draft.trim()}
         />
       </View>
-      <View style={{ marginTop: spacing.lg }}>
-        {examDate ? (
-          <>
-            <DateField
-              label="Exam date (optional)"
-              value={examDate}
-              onChange={setExamDate}
+      {selected.length > 0 ? (
+        <View style={{ marginTop: spacing.lg }}>
+          {selected.map(name => (
+            <ExamDateRow
+              key={nameKey(name)}
+              name={name}
+              value={dateFor(name)}
+              onChange={d => setDates(m => ({ ...m, [nameKey(name)]: d }))}
             />
-            <Button
-              title="Clear exam date"
-              variant="text"
-              onPress={() => setExamDate(null)}
-            />
-          </>
-        ) : (
-          <Button
-            title="Set exam date (optional)"
-            variant="secondary"
-            onPress={() => setExamDate(localToday())}
-          />
-        )}
-        <Text style={{ color: colors.muted, marginTop: spacing.xs }}>
-          The date applies to exams added in this step.
-        </Text>
-      </View>
+          ))}
+        </View>
+      ) : null}
       {error ? <ErrorRetry error={error} onRetry={next} /> : null}
       <View style={{ marginTop: spacing.lg }}>
         <Button
