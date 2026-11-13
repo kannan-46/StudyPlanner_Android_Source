@@ -1,7 +1,10 @@
 {
   "extends": "@react-native/typescript-config",
   "compilerOptions": {
-    "types": []
+    "types": ["jest"],
+    "paths": {
+      "@planner/shared": ["../../packages/shared/src"]
+    }
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["**/node_modules", "**/Pods"]

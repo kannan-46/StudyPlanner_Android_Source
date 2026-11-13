@@ -8,5 +8,6 @@ class AppConfigModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
 
     override fun getConstants(): Map<String, Any> = mapOf(
         "API_BASE_URL" to BuildConfig.API_BASE_URL,
+        "GOOGLE_WEB_CLIENT_ID" to BuildConfig.GOOGLE_WEB_CLIENT_ID,
     )
 }
