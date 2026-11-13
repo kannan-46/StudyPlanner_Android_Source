@@ -9,6 +9,7 @@ export interface AppConfig {
   trustProxyHops: number;
   devGoogleStub: boolean;
   buildSha: string | null;
+  contactEmail?: string | null;
 }
 
 const schema = z.object({
@@ -21,6 +22,7 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   DEV_GOOGLE_STUB: z.enum(['true', 'false']).default('false'),
+  CONTACT_EMAIL: z.string().optional(),
   VERCEL: z.string().optional(),
   VERCEL_GIT_COMMIT_SHA: z.string().optional(),
 });
@@ -55,5 +57,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     trustProxyHops: e.VERCEL ? 1 : e.TRUST_PROXY_HOPS,
     devGoogleStub,
     buildSha: e.VERCEL_GIT_COMMIT_SHA ?? null,
+    contactEmail: e.CONTACT_EMAIL ?? null,
   };
 }

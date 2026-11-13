@@ -12,6 +12,7 @@ import { healthRouter } from './modules/health/health.routes';
 import { agendaRouter } from './modules/agenda/agenda.routes';
 import { statsRouter } from './modules/stats/stats.routes';
 import { mockTestsRouter } from './modules/mockTests/mockTests.routes';
+import { pagesRouter } from './modules/pages/pages.routes';
 import {
   BACKUP_BODY_LIMIT,
   backupRouter,
@@ -30,6 +31,7 @@ export function createApp(
   app.use('/v1/backup', express.json({ limit: BACKUP_BODY_LIMIT }));
   app.use(express.json({ limit: '1mb' }));
 
+  app.use(pagesRouter(deps));
   app.use(healthRouter(deps));
   app.use('/v1/auth', authRouter(deps));
   app.use('/v1/me', meRouter(deps));
