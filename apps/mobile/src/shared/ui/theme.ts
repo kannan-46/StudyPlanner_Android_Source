@@ -1,4 +1,4 @@
-export type Theme = {
+export type Colors = {
   background: string;
   surface: string;
   text: string;
@@ -12,7 +12,7 @@ export type Theme = {
   input: string;
 };
 
-export const lightTheme: Theme = {
+export const lightColors: Colors = {
   background: '#F3F7FA',
   surface: '#FFFFFF',
   text: '#142C3A',
@@ -26,7 +26,7 @@ export const lightTheme: Theme = {
   input: '#F8FBFC',
 };
 
-export const darkTheme: Theme = {
+export const darkColors: Colors = {
   background: '#101A20',
   surface: '#17252D',
   text: '#E6EEF2',
@@ -45,3 +45,14 @@ export const examColors = {
   'NEET SS': '#9B5D98',
   Both: '#6873B5',
 } as const;
+
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+export const radius = { sm: 8, md: 12, lg: 16, pill: 999 } as const;
