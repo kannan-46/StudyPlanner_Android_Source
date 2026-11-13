@@ -183,6 +183,44 @@ describe('backup', () => {
     expect((await request(app).get('/v1/topics').set(h)).body).toHaveLength(1);
   });
 
+  it('merging an export of native topics into the same account is a no-op', async () => {
+    const app = build();
+    const a = await signIn(app, 'bk-native');
+    const h = bearer(a.accessToken);
+    const subject = await request(app)
+      .post('/v1/subjects')
+      .set(h)
+      .send({ name: 'Anatomy' });
+    for (const name of ['Brachial plexus', 'Inguinal canal']) {
+      const t = await request(app).post('/v1/topics').set(h).send({
+        name,
+        subjectId: subject.body.id,
+        studiedOn: '2026-11-01',
+      });
+      expect(t.status).toBe(201);
+    }
+    await request(app).post('/v1/mock-tests').set(h).send({
+      title: 'Mock 1',
+      takenOn: '2026-11-02',
+      score: 1,
+      maxScore: 2,
+    });
+    const exp = (await request(app).get('/v1/backup').set(h)).body;
+    const res = await importFile(app, a.accessToken, exp, 'merge');
+    expect(res.status).toBe(200);
+    expect(res.body.skipped.topics).toBe(2);
+    expect(res.body.imported).toEqual({
+      exams: 0,
+      subjects: 0,
+      topics: 0,
+      mockTests: 0,
+    });
+    expect((await request(app).get('/v1/topics').set(h)).body).toHaveLength(2);
+    expect((await request(app).get('/v1/mock-tests').set(h)).body).toHaveLength(
+      1,
+    );
+  });
+
   it('rejects an invalid file with BACKUP_INVALID', async () => {
     const app = build();
     const a = await signIn(app, 'bk-invalid');

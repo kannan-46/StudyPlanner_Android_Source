@@ -33,6 +33,8 @@ export interface ImportPlan {
     score: number;
     maxScore: number;
     examName: string | null;
+    /** v1 file id; on merge it matches an existing mock test _id. */
+    sourceId?: string;
     notes: string;
   }[];
 }

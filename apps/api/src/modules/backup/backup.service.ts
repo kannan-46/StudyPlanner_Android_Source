@@ -22,7 +22,6 @@ import {
   type SubjectDoc,
 } from '../subjects/subjects.repository';
 import type { TopicDoc } from '../topics/topic.mapper';
-import { createTopicsRepository } from '../topics/topics.repository';
 import { createUsersRepository } from '../users/users.repository';
 import { mapLegacyBackup, type ImportPlan } from './legacy-mapper';
 
@@ -54,6 +53,7 @@ function v1ToPlan(data: BackupV1): ImportPlan {
         .map(r => ({ doneOn: r.doneOn, dueOverride: r.dueOverride })),
     })),
     mockTests: data.mockTests.map(m => ({
+      sourceId: m.id,
       title: m.title,
       takenOn: m.takenOn,
       score: m.score,
@@ -207,15 +207,25 @@ export function createBackupService(deps: AppDeps) {
     const topicsCol = db.collection<TopicDoc>('topics');
     // Everything below up to the first write only reads, so a limit or
     // validation failure leaves the user's data untouched.
-    let existingLegacy = new Set<string>();
+    // Existing keys: stored legacyIds plus native _ids, so merging an
+    // account's own export (where legacyId falls back to the id) is a no-op.
+    const existingLegacy = new Set<string>();
+    const existingMocks = new Set<string>();
     let existingCount = 0;
     if (mode === 'merge') {
-      existingCount = await createTopicsRepository(db).countForUser(userId);
-      const ids = await topicsCol.distinct('legacyId', {
-        userId,
-        legacyId: { $type: 'string' },
-      });
-      existingLegacy = new Set(ids as string[]);
+      const docs = await topicsCol
+        .find({ userId }, { projection: { _id: 1, legacyId: 1 } })
+        .toArray();
+      existingCount = docs.length;
+      for (const d of docs) {
+        existingLegacy.add(d._id.toHexString());
+        if (typeof d.legacyId === 'string') existingLegacy.add(d.legacyId);
+      }
+      const mocks = await db
+        .collection<MockTestDoc>('mockTests')
+        .find({ userId }, { projection: { _id: 1 } })
+        .toArray();
+      mocks.forEach(m => existingMocks.add(m._id.toHexString()));
     }
     const toImport = plan.topics.filter(t => !existingLegacy.has(t.legacyId));
     let skipped = plan.topics.length - toImport.length;
@@ -281,7 +291,10 @@ export function createBackupService(deps: AppDeps) {
       }
     }
 
-    const mockDocs: MockTestDoc[] = plan.mockTests.map(m => ({
+    const newMocks = plan.mockTests.filter(
+      m => m.sourceId === undefined || !existingMocks.has(m.sourceId),
+    );
+    const mockDocs: MockTestDoc[] = newMocks.map(m => ({
       _id: new ObjectId(),
       userId,
       title: m.title,
