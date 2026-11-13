@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWindowDimensions } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {
   NavigationContainer,
@@ -116,14 +116,10 @@ it('shows sign in when signed out', async () => {
   expect(screen.getByText('Continue with Google')).toBeTruthy();
 });
 
-it('shows the onboarding placeholder and finishes setup', async () => {
+it('shows the onboarding flow for a new user', async () => {
   setState({ status: 'signedIn', user: userWith(null) });
   await setup();
-  await fireEvent.press(screen.getByText('Finish setup'));
-  expect(http.patch).toHaveBeenCalledWith('/v1/me', {
-    onboardingCompleted: true,
-  });
-  expect(refreshUser).toHaveBeenCalled();
+  expect(await screen.findByText('Step 1 of 4')).toBeTruthy();
 });
 
 it('shows the tabs for a completed user', async () => {

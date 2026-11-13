@@ -7,7 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { useAuth } from '../features/auth/AuthProvider';
 import { SignInScreen } from '../features/auth/SignInScreen';
-import { OnboardingPlaceholder } from '../features/onboarding/OnboardingPlaceholder';
+import { OnboardingNavigator } from '../features/onboarding/OnboardingNavigator';
 import { TopicFormScreen } from '../features/topics/TopicFormScreen';
 import { TopicDetailScreen } from '../features/topics/TopicDetailScreen';
 import { ReminderHealthScreen } from '../features/reminders/ReminderHealthScreen';
@@ -63,7 +63,7 @@ function RootScreens() {
   if (state.status === 'loading') return <Splash />;
   if (state.status === 'signedOut') return <SignInScreen />;
   if (state.user.onboardingCompletedAt === null) {
-    return <OnboardingPlaceholder />;
+    return <OnboardingNavigator />;
   }
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

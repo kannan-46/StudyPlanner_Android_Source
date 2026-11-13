@@ -41,6 +41,10 @@ export type TopicFormProps = {
   initial?: TopicView;
   /** Compact (onboarding): name, subject, exams and date only. */
   compact?: boolean;
+  /** Clear only the name after a successful create (keep subject/exams/date). */
+  clearNameOnSave?: boolean;
+  /** Overrides the submit button label. */
+  submitLabel?: string;
   onSaved: (topic: TopicView) => void;
 };
 
@@ -54,7 +58,14 @@ function parseIntervals(text: string): number[] | undefined | 'invalid' {
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && a.every(x => b.includes(x));
 
-export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
+export function TopicForm({
+  mode,
+  initial,
+  compact,
+  clearNameOnSave,
+  submitLabel,
+  onSaved,
+}: TopicFormProps) {
   const { colors, spacing } = useTheme();
   const { subjects: subjectsApi, me: meApi } = useApi();
   const subjectsQ = useSubjects();
@@ -149,7 +160,9 @@ export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
       const subjectId = await resolveSubjectId();
       if (mode === 'create') {
         const input: TopicCreateInput = { ...parsed.data, subjectId };
-        onSaved(await createTopic.mutateAsync(input));
+        const created = await createTopic.mutateAsync(input);
+        if (clearNameOnSave) setName('');
+        onSaved(created);
         return;
       }
       if (!initial) return;
@@ -311,7 +324,7 @@ export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
       ) : null}
       {submitError ? <ErrorRetry error={submitError} onRetry={submit} /> : null}
       <Button
-        title={mode === 'create' ? 'Add topic' : 'Save'}
+        title={submitLabel ?? (mode === 'create' ? 'Add topic' : 'Save')}
         onPress={submit}
         loading={saving}
       />

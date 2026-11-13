@@ -1,0 +1,271 @@
+import React from 'react';
+import { AppState, useWindowDimensions } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { addDays, localToday } from '@planner/shared';
+import { formatDate } from '../../../shared/lib/format';
+import { ApiError } from '../../../shared/api/errors';
+import { useAuth } from '../../auth/AuthProvider';
+import {
+  getReminderStatus,
+  openReminderSettings,
+  requestNotificationPermission,
+} from '../../../native/reminders';
+import { OnboardingNavigator } from '../OnboardingNavigator';
+import { TopicsStep } from '../TopicsStep';
+import {
+  cleanupClients,
+  makeHttp,
+  renderWithProviders,
+  topic,
+} from '../../../test/testUtils';
+
+jest.mock('../../auth/AuthProvider', () => ({
+  useAuth: jest.fn(),
+  notifySessionEnded: jest.fn(),
+}));
+jest.mock('../../../native/reminders', () => ({
+  getReminderStatus: jest.fn(),
+  requestNotificationPermission: jest.fn(),
+  openReminderSettings: jest.fn(),
+  configureReminders: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+const refreshUser = jest.fn();
+const mockDims = (width: number, fontScale = 1) =>
+  (useWindowDimensions as jest.Mock).mockReturnValue({
+    width,
+    height: 800,
+    scale: 2,
+    fontScale,
+  });
+const status = (over = {}) => ({
+  notificationsEnabled: false,
+  exactAlarmsAllowed: true,
+  ignoringBatteryOptimizations: true,
+  nextFireAtMillis: null,
+  ...over,
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockDims(360);
+  (useAuth as jest.Mock).mockReturnValue({ refreshUser });
+  (getReminderStatus as jest.Mock).mockResolvedValue(status());
+});
+afterEach(cleanupClients);
+
+const renderStep = (
+  initialRouteName: 'Exams' | 'Intervals' | 'Reminders' | 'Topics',
+  http = makeHttp(),
+) =>
+  renderWithProviders(
+    <NavigationContainer>
+      <OnboardingNavigator initialRouteName={initialRouteName} />
+    </NavigationContainer>,
+    http,
+  );
+
+describe('ExamStep', () => {
+  it('disables Next with nothing selected, then creates the picked exam', async () => {
+    const http = makeHttp();
+    http.get.mockImplementation(async () => []);
+    http.post.mockResolvedValue({ id: 'e1', name: 'NEET SS', examDate: null });
+    await renderStep('Exams', http);
+    expect(await screen.findByText('Step 1 of 4')).toBeOnTheScreen();
+    const next = screen.getByRole('button', { name: 'Next' });
+    expect(next.props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(screen.getByText('NEET SS'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(http.post).toHaveBeenCalledWith('/v1/exams', { name: 'NEET SS' }),
+    );
+    expect(await screen.findByText('Step 2 of 4')).toBeOnTheScreen();
+  });
+
+  it('keeps the selection on errors and ignores DUPLICATE_NAME', async () => {
+    const http = makeHttp();
+    http.get.mockImplementation(async () => []);
+    http.post
+      .mockRejectedValueOnce(new ApiError('NETWORK', 0))
+      .mockRejectedValueOnce(new ApiError('DUPLICATE_NAME', 409));
+    await renderStep('Exams', http);
+    await fireEvent.press(await screen.findByText('NEET SS'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(
+      await screen.findByText("Can't reach the server — try again"),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('checkbox', { name: 'NEET SS' }).props.accessibilityState
+        .checked,
+    ).toBe(true);
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Step 2 of 4')).toBeOnTheScreen();
+  });
+
+  it('pre-selects existing exams and keeps Next reachable at 320 dp', async () => {
+    mockDims(320, 1.3);
+    await renderStep('Exams');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('checkbox', { name: 'MS General Surgery' }).props
+          .accessibilityState.checked,
+      ).toBe(true),
+    );
+    expect(screen.getByRole('button', { name: 'Next' })).toBeOnTheScreen();
+  });
+});
+
+describe('IntervalsStep', () => {
+  it('rejects [4,4] and previews [4,7,15] from today + 4', async () => {
+    await renderStep('Intervals');
+    const field = await screen.findByLabelText('Intervals (days)');
+    await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
+    await fireEvent.changeText(field, '4, 4');
+    expect(
+      await screen.findByText('Intervals must increase, e.g. 4, 7, 15'),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Next' }).props.accessibilityState
+        .disabled,
+    ).toBe(true);
+    await fireEvent.changeText(field, '4, 7, 15');
+    expect(screen.queryByText(/must increase/)).toBeNull();
+    expect(screen.getByTestId('interval-preview')).toBeOnTheScreen();
+    expect(screen.getByTestId('preview-1')).toHaveTextContent(
+      `Revision 1: ${formatDate(addDays(localToday(), 4))}`,
+    );
+  });
+
+  it('saves intervals and moves on', async () => {
+    const http = makeHttp();
+    http.patch.mockResolvedValue({ settings: { intervals: [4, 7, 15] } });
+    await renderStep('Intervals', http);
+    const field = await screen.findByLabelText('Intervals (days)');
+    await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+        settings: { intervals: [4, 7, 15] },
+      }),
+    );
+    expect(await screen.findByText('Step 3 of 4')).toBeOnTheScreen();
+  });
+});
+
+describe('RemindersStep', () => {
+  it('shows Not allowed and requests notification permission', async () => {
+    (requestNotificationPermission as jest.Mock).mockResolvedValue(true);
+    await renderStep('Reminders');
+    expect(await screen.findByText('Not allowed')).toBeOnTheScreen();
+    expect(screen.getByText(/reminders may not appear/)).toBeOnTheScreen();
+    (getReminderStatus as jest.Mock).mockResolvedValue(
+      status({ notificationsEnabled: true }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Allow' }));
+    expect(requestNotificationPermission).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('Not allowed')).toBeNull());
+  });
+
+  it('opens settings for battery and re-checks on foreground', async () => {
+    (getReminderStatus as jest.Mock).mockResolvedValue(
+      status({
+        notificationsEnabled: true,
+        ignoringBatteryOptimizations: false,
+      }),
+    );
+    await renderStep('Reminders');
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Unrestrict' }),
+    );
+    expect(openReminderSettings).toHaveBeenCalledWith('battery');
+    (getReminderStatus as jest.Mock).mockResolvedValue(
+      status({
+        notificationsEnabled: true,
+        ignoringBatteryOptimizations: true,
+      }),
+    );
+    const listeners = (AppState.addEventListener as jest.Mock).mock.calls
+      .filter(c => c[0] === 'change')
+      .map(c => c[1] as (s: string) => void);
+    listeners.forEach(l => l('background'));
+    listeners.forEach(l => l('active'));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Unrestrict' })).toBeNull(),
+    );
+  });
+
+  it('saves reminder settings even with missing permissions', async () => {
+    const http = makeHttp();
+    http.patch.mockResolvedValue({});
+    await renderStep('Reminders', http);
+    await screen.findByText('Not allowed');
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+        settings: {
+          reminderTime: '08:00',
+          dailyReminder: true,
+          timezone: expect.any(String),
+        },
+      }),
+    );
+    expect(await screen.findByText('Step 4 of 4')).toBeOnTheScreen();
+  });
+});
+
+describe('TopicsStep', () => {
+  it('disables Finish until a topic is added, then completes onboarding', async () => {
+    const http = makeHttp();
+    http.post.mockResolvedValue(topic());
+    http.patch.mockResolvedValue({});
+    await renderWithProviders(<TopicsStep />, http);
+    expect(await screen.findByText('Added: 0 topics')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Finish' }).props.accessibilityState
+        .disabled,
+    ).toBe(true);
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Hernia');
+    await fireEvent.press(await screen.findByText('Anatomy'));
+    await fireEvent.press(screen.getByText('Add another'));
+    expect(await screen.findByText('Added: 1 topic')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Topic name').props.value).toBe('');
+    expect(
+      screen.getByRole('radio', { name: 'Anatomy' }).props.accessibilityState
+        .selected,
+    ).toBe(true);
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+        onboardingCompleted: true,
+      }),
+    );
+    await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+  });
+
+  it('Skip for now completes onboarding without topics', async () => {
+    const http = makeHttp();
+    http.patch.mockResolvedValue({});
+    await renderWithProviders(<TopicsStep />, http);
+    await fireEvent.press(await screen.findByText('Skip for now'));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+        onboardingCompleted: true,
+      }),
+    );
+    await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+  });
+
+  it('centres the step in a 720 dp column on large screens', async () => {
+    mockDims(1000);
+    await renderWithProviders(<TopicsStep />, makeHttp());
+    await screen.findByText('Added: 0 topics');
+    expect(screen.getByTestId('responsive-container').props.style).toEqual(
+      expect.objectContaining({ maxWidth: 720 }),
+    );
+  });
+});
