@@ -1,8 +1,9 @@
 import React from 'react';
 import { useWindowDimensions } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { addDays, localToday, type AgendaItem } from '@planner/shared';
 import { ScheduleScreen } from '../ScheduleScreen';
+import { ApiError } from '../../../shared/api/errors';
 import {
   ID,
   cleanupClients,
@@ -52,8 +53,8 @@ const items = [
   item('Later topic', 'upcoming', addDays(today, 5), ID(102)),
 ];
 
-function httpWith(agenda: AgendaItem[]) {
-  const http = makeHttp([topic()]);
+function httpWith(agenda: AgendaItem[], topics = [topic()]) {
+  const http = makeHttp(topics);
   const base = http.get.getMockImplementation() as (
     p: string,
     q?: unknown,
@@ -110,5 +111,63 @@ describe('ScheduleScreen', () => {
     await fireEvent.press(await screen.findByText('Hernia'));
     expect(await screen.findByText('Some notes')).toBeOnTheScreen();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('exam chip filters by topic exams and keeps unknown topics', async () => {
+    const other = topic({ id: ID(103), name: 'Other', examIds: [] });
+    const agenda = [
+      item('Hernia', 'today', today),
+      item('Other', 'today', today, ID(103)),
+      item('Ghost', 'today', today, ID(999)),
+    ];
+    await renderWithProviders(
+      <ScheduleScreen />,
+      httpWith(agenda, [topic(), other]),
+    );
+    await screen.findByText('Hernia');
+    await fireEvent.press(await screen.findByText('MS General Surgery'));
+    expect(screen.getByText('Hernia')).toBeOnTheScreen();
+    expect(screen.getByText('Ghost')).toBeOnTheScreen();
+    expect(screen.queryByText('Other')).toBeNull();
+  });
+
+  it('exam chip keeps all items while topics are not loaded', async () => {
+    const http = httpWith([item('Hernia', 'today', today)]);
+    const base = http.get.getMockImplementation() as (
+      p: string,
+      q?: unknown,
+    ) => Promise<unknown>;
+    http.get.mockImplementation(async (path: string, q?: unknown) => {
+      if (path === '/v1/topics') throw new ApiError('NETWORK', 0);
+      return base(path, q);
+    });
+    await renderWithProviders(<ScheduleScreen />, http);
+    await fireEvent.press(await screen.findByText('MS General Surgery'));
+    expect(screen.getByText('Hernia')).toBeOnTheScreen();
+  });
+
+  it('rolls the cached agenda back when Done is rejected', async () => {
+    const http = httpWith([item('Hernia', 'today', today)]);
+    http.post.mockRejectedValue(new ApiError('NETWORK', 0));
+    await renderWithProviders(<ScheduleScreen />, http);
+    await fireEvent.press(await screen.findByText('Done'));
+    expect(
+      await screen.findByText("Can't reach the server — try again"),
+    ).toBeOnTheScreen();
+    expect(await screen.findByText('Hernia')).toBeOnTheScreen();
+    expect(screen.getByText('Done')).toBeOnTheScreen();
+  });
+
+  it('VERSION_CONFLICT shows the message and refetches the agenda', async () => {
+    const http = httpWith([item('Hernia', 'today', today)]);
+    http.post.mockRejectedValue(new ApiError('VERSION_CONFLICT', 409));
+    await renderWithProviders(<ScheduleScreen />, http);
+    const agendaCalls = () =>
+      http.get.mock.calls.filter(c => c[0] === '/v1/agenda').length;
+    await fireEvent.press(await screen.findByText('Done'));
+    expect(
+      await screen.findByText('This changed on another device — refreshed'),
+    ).toBeOnTheScreen();
+    await waitFor(() => expect(agendaCalls()).toBeGreaterThan(1));
   });
 });

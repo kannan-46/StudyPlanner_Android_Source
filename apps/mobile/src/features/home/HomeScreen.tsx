@@ -106,7 +106,11 @@ export function HomeScreen() {
   const comingUpCard = (
     <Card>
       {heading('Coming up')}
-      {upcoming.length === 0 ? (
+      {agendaQ.isPending ? (
+        <Text style={{ color: colors.muted }}>Loading…</Text>
+      ) : agendaQ.error && !agendaQ.data ? (
+        <ErrorRetry error={agendaQ.error} onRetry={() => agendaQ.refetch()} />
+      ) : upcoming.length === 0 ? (
         <Text style={{ color: colors.muted }}>Nothing coming up</Text>
       ) : (
         upcoming.map(i => (

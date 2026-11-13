@@ -167,7 +167,12 @@ export function RevisionRow({
 /** Builds TopicDetail's renderRevision from a topic's full revision list. */
 export function renderRevisionRow(topicId: string, topicName?: string) {
   return (r: RevisionView, all: RevisionView[]): ReactNode => {
-    const firstPending = all.find(x => x.doneOn === null);
+    const firstPending = all
+      .filter(x => x.doneOn === null)
+      .reduce<RevisionView | null>(
+        (m, x) => (m === null || x.step < m.step ? x : m),
+        null,
+      );
     const done = all.filter(x => x.doneOn !== null);
     const lastDone = done.reduce<RevisionView | null>(
       (m, x) => (m === null || x.step > m.step ? x : m),

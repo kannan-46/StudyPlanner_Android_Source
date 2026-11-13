@@ -55,7 +55,10 @@ export function ScheduleScreen() {
       (topicsQ.data ?? []).map(t => [t.id, t.examIds]),
     );
     const items = (agendaQ.data ?? []).filter(
-      i => !examId || (examsByTopic.get(i.topicId) ?? []).includes(examId),
+      i =>
+        !examId ||
+        !examsByTopic.has(i.topicId) ||
+        (examsByTopic.get(i.topicId) ?? []).includes(examId),
     );
     return SECTIONS.map(s => ({
       title: s.title,
