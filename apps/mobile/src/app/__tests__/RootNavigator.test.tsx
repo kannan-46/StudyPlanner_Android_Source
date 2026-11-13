@@ -2,8 +2,11 @@ import React from 'react';
 import { useWindowDimensions } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { NavigationContainer, getStateFromPath } from '@react-navigation/native';
-import { QueryClientProvider } from '@tanstack/react-query';
+import {
+  NavigationContainer,
+  getStateFromPath,
+} from '@react-navigation/native';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { UserView } from '@planner/shared';
 import { createQueryClient } from '../../shared/api/queryClient';
@@ -44,7 +47,7 @@ const userWith = (onboardingCompletedAt: string | null) =>
     id: 'u1',
     onboardingCompletedAt,
     settings: { theme: 'light' },
-  }) as unknown as UserView;
+  } as unknown as UserView);
 
 const refreshUser = jest.fn();
 const http = {
@@ -54,7 +57,18 @@ const http = {
   del: jest.fn(),
 } as unknown as Http;
 
+const clients: QueryClient[] = [];
+afterEach(async () => {
+  for (const c of clients.splice(0)) {
+    await c.cancelQueries();
+    c.clear();
+  }
+});
+
 async function setup(child: React.ReactNode = <RootNavigator />) {
+  const client = createQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
+  clients.push(client);
   return render(
     <SafeAreaProvider
       initialMetrics={{
@@ -62,7 +76,7 @@ async function setup(child: React.ReactNode = <RootNavigator />) {
         insets: { top: 0, left: 0, right: 0, bottom: 0 },
       }}
     >
-      <QueryClientProvider client={createQueryClient()}>
+      <QueryClientProvider client={client}>
         <ApiProvider http={http}>
           <ThemeProvider mode="light">
             <NavigationContainer>{child}</NavigationContainer>

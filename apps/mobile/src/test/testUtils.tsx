@@ -3,11 +3,11 @@ import { render } from '@testing-library/react-native';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { SubjectView, ExamView, TopicView } from '@planner/shared';
-import { createQueryClient } from '../../shared/api/queryClient';
-import { ApiProvider } from '../../shared/api/ApiProvider';
-import type { Http } from '../../shared/api/http';
-import { ThemeProvider } from '../../shared/ui/ThemeProvider';
-import { SnackbarProvider } from '../../shared/ui/Snackbar';
+import { createQueryClient } from '../shared/api/queryClient';
+import { ApiProvider } from '../shared/api/ApiProvider';
+import type { Http } from '../shared/api/http';
+import { ThemeProvider } from '../shared/ui/ThemeProvider';
+import { SnackbarProvider } from '../shared/ui/Snackbar';
 
 export const ID = (n: number) => String(n).padStart(24, '0');
 
@@ -62,6 +62,7 @@ export function makeHttp(topics: TopicView[] = []): Mocks {
     get: jest.fn(async (path: string) => {
       if (path === '/v1/subjects') return subjects;
       if (path === '/v1/exams') return exams;
+      if (path === '/v1/me') return { settings: { intervals: [4, 7, 15] } };
       if (path === '/v1/topics') return topics;
       const m = /^\/v1\/topics\/(.+)$/.exec(path);
       if (m) return topics.find(t => t.id === m[1]);
@@ -85,7 +86,7 @@ export async function renderWithProviders(ui: React.ReactElement, http: Mocks) {
   const qc = createQueryClient();
   qc.setDefaultOptions({
     queries: { retry: false },
-    mutations: { retry: false },
+    mutations: { retry: false, gcTime: 0 },
   });
   clients.push(qc);
   return render(

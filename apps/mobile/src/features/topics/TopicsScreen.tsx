@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -26,6 +27,7 @@ import { Screen } from '../../shared/ui/Screen';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useExams } from '../exams/hooks';
 import { useSubjects } from '../subjects/hooks';
+import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { useTopics } from './hooks';
 import { TopicDetailContent } from './TopicDetailScreen';
 
@@ -119,6 +121,7 @@ export function TopicsScreen() {
 
   const topicsQ = useTopics(query);
   const subjectsQ = useSubjects();
+  useRefetchOnFocus(() => topicsQ.refetch());
   const examsQ = useExams();
   const today = localToday();
   const hasFilters = !!(q || subjectId || examId);
@@ -214,7 +217,13 @@ export function TopicsScreen() {
         }
         ListHeaderComponent={header}
         ListEmptyComponent={
-          topicsQ.isPending ? undefined : topicsQ.error ? (
+          topicsQ.isPending ? (
+            <ActivityIndicator
+              color={colors.accent}
+              accessibilityLabel="Loading"
+              style={{ marginTop: spacing.xl }}
+            />
+          ) : topicsQ.error ? (
             <ErrorRetry
               error={topicsQ.error}
               onRetry={() => topicsQ.refetch()}

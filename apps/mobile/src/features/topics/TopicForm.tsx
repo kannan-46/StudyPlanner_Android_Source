@@ -27,7 +27,13 @@ const NEW_SUBJECT = '__new__';
 /** Stands in for the not-yet-created subject while validating. */
 const PLACEHOLDER_ID = '0'.repeat(24);
 
-type Field = 'name' | 'subject' | 'newSubject' | 'studiedOn' | 'intervals';
+type Field =
+  | 'name'
+  | 'subject'
+  | 'newSubject'
+  | 'studiedOn'
+  | 'intervals'
+  | 'form';
 type Errors = Partial<Record<Field, string>>;
 
 export type TopicFormProps = {
@@ -50,7 +56,7 @@ const sameSet = (a: string[], b: string[]) =>
 
 export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
   const { colors, spacing } = useTheme();
-  const { subjects: subjectsApi } = useApi();
+  const { subjects: subjectsApi, me: meApi } = useApi();
   const subjectsQ = useSubjects();
   const examsQ = useExams();
   const createTopic = useCreateTopic();
@@ -127,6 +133,10 @@ export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
         else if (key === 'studiedOn') next.studiedOn ??= issue.message;
         else if (key === 'intervals') next.intervals ??= issue.message;
       }
+      if (Object.keys(next).length === 0) {
+        next.form =
+          parsed.error.issues[0]?.message ?? 'Check the form and try again';
+      }
     }
     if (Object.keys(next).length > 0 || !parsed.success) {
       setErrors(next);
@@ -152,11 +162,18 @@ export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
       if (parsed.data.studiedOn !== initial.studiedOn) {
         patch.studiedOn = parsed.data.studiedOn;
       }
-      if (
-        parsed.data.intervals &&
-        parsed.data.intervals.join(',') !== initial.intervals.join(',')
-      ) {
-        patch.intervals = parsed.data.intervals;
+      let wanted = parsed.data.intervals;
+      if (!wanted && !compact) {
+        // Cleared field: go back to the user's default intervals.
+        wanted = (await meApi.get()).settings?.intervals;
+        if (!wanted) {
+          setShowAdvanced(true);
+          setErrors({ intervals: 'Enter intervals like 4, 7, 15' });
+          return;
+        }
+      }
+      if (wanted && wanted.join(',') !== initial.intervals.join(',')) {
+        patch.intervals = wanted;
       }
       if (parsed.data.notes !== initial.notes) patch.notes = parsed.data.notes;
       if (Object.keys(patch).length === 0) {
@@ -165,7 +182,10 @@ export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
       }
       const checked = topicUpdateSchema.safeParse(patch);
       if (!checked.success) {
-        setErrors({ intervals: checked.error.issues[0]?.message });
+        setErrors({
+          intervals: checked.error.issues[0]?.message,
+          form: checked.error.issues[0]?.message,
+        });
         return;
       }
       onSaved(
@@ -284,6 +304,11 @@ export function TopicForm({ mode, initial, compact, onSaved }: TopicFormProps) {
         </>
       )}
 
+      {errors.form ? (
+        <Text style={{ color: colors.danger, marginBottom: spacing.sm }}>
+          {errors.form}
+        </Text>
+      ) : null}
       {submitError ? <ErrorRetry error={submitError} onRetry={submit} /> : null}
       <Button
         title={mode === 'create' ? 'Add topic' : 'Save'}

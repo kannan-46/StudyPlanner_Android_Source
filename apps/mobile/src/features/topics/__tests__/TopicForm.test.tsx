@@ -8,7 +8,7 @@ import {
   makeHttp,
   renderWithProviders,
   topic,
-} from '../testUtils';
+} from '../../../test/testUtils';
 
 afterEach(cleanupClients);
 
@@ -135,6 +135,27 @@ describe('TopicForm', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(http.patch).toHaveBeenCalledWith(`/v1/topics/${t.id}`, {
       notes: 'New',
+    });
+  });
+
+  it('edit mode: clearing intervals resets to the settings intervals', async () => {
+    const http = makeHttp();
+    const t = topic();
+    http.patch.mockResolvedValue(t);
+    const onSaved = jest.fn();
+    await renderWithProviders(
+      <TopicForm mode="edit" initial={t} onSaved={onSaved} />,
+      http,
+    );
+    await fireEvent.press(await screen.findByText(/Advanced/));
+    await fireEvent.changeText(
+      screen.getByLabelText('Custom intervals (days)'),
+      '',
+    );
+    await fireEvent.press(screen.getByText('Save'));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(http.patch).toHaveBeenCalledWith(`/v1/topics/${t.id}`, {
+      intervals: [4, 7, 15],
     });
   });
 

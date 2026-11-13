@@ -16,6 +16,7 @@ import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { Screen } from '../../shared/ui/Screen';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
+import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { useExams } from '../exams/hooks';
 import { useSubjects } from '../subjects/hooks';
 import { useDeleteTopic, useTopic } from './hooks';
@@ -91,6 +92,7 @@ export function TopicDetailContent({
   const subjectsQ = useSubjects();
   const examsQ = useExams();
   const del = useDeleteTopic();
+  useRefetchOnFocus(() => topicQ.refetch());
 
   if (topicQ.isPending) {
     return (

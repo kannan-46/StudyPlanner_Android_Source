@@ -9,11 +9,12 @@ import {
   makeHttp,
   renderWithProviders,
   topic,
-} from '../testUtils';
+} from '../../../test/testUtils';
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
+  useFocusEffect: jest.fn(),
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
 }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
