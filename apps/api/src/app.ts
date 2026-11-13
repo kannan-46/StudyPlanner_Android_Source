@@ -12,6 +12,10 @@ import { healthRouter } from './modules/health/health.routes';
 import { agendaRouter } from './modules/agenda/agenda.routes';
 import { statsRouter } from './modules/stats/stats.routes';
 import { mockTestsRouter } from './modules/mockTests/mockTests.routes';
+import {
+  BACKUP_BODY_LIMIT,
+  backupRouter,
+} from './modules/backup/backup.routes';
 
 export function createApp(
   deps: AppDeps,
@@ -22,6 +26,8 @@ export function createApp(
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(requestId);
+  // Backups need a larger body; express.json skips already-parsed bodies.
+  app.use('/v1/backup', express.json({ limit: BACKUP_BODY_LIMIT }));
   app.use(express.json({ limit: '1mb' }));
 
   app.use(healthRouter(deps));
@@ -33,6 +39,7 @@ export function createApp(
   app.use('/v1/agenda', agendaRouter(deps));
   app.use('/v1/stats', statsRouter(deps));
   app.use('/v1/mock-tests', mockTestsRouter(deps));
+  app.use('/v1/backup', backupRouter(deps));
   extraRoutes?.(app);
 
   app.use(notFoundHandler);
