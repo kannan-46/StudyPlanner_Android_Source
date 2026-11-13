@@ -279,6 +279,18 @@ apps/mobile/
   - `EmptyState({title, body?, actionLabel?, onAction?})`.
   - `ErrorRetry({error, onRetry})` uses `userMessage`.
   - `Screen({children, scroll?})` handles safe area and the background colour.
+- **Responsive helpers:** `src/shared/ui/responsive.ts`:
+  - `useResponsive()` (shape in Global Constraints).
+  - `<ResponsiveContainer maxWidth={720}>`, which centres content on medium and expanded.
+  - `columnsFor(size, { compact: 1, medium: 2, expanded: 2 })`.
+  - `Screen` uses `ResponsiveContainer`, and handles the keyboard with `KeyboardAvoidingView` (`behavior="height"` on Android) inside a `ScrollView` when `scroll` is set.
+  - `Button` and `ChipSelect` have a `minHeight` of 48.
+  - Tests in `src/shared/ui/__tests__/responsive.test.tsx`:
+    - mocked width 320 → `size` is compact
+    - 700 → medium
+    - 1000 → expanded
+    - landscape is detected
+    - `ResponsiveContainer` applies `maxWidth` 720 only at 700 dp or wider
 - **Formatting:** `format.ts`:
   - `formatDate(d: LocalDate): string` gives `'5 Nov'`; it adds the year when it isn't the current year.
   - `relativeDay(d, today)` gives `'Today'`, `'Tomorrow'`, `'3 days overdue'` or `'in 4 days'`.
