@@ -22,6 +22,11 @@ export function requireAuth(deps: AppDeps): RequestHandler {
       } catch {
         throw new AppError('UNAUTHENTICATED');
       }
+      const db = await deps.getDb();
+      const exists = await db
+        .collection('users')
+        .countDocuments({ _id: id }, { limit: 1 });
+      if (!exists) throw new AppError('UNAUTHENTICATED');
       res.locals.userId = id;
       next();
     } catch (e) {

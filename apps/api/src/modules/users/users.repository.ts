@@ -46,24 +46,31 @@ export function createUsersRepository(db: Db): UsersRepository {
   const users = db.collection<UserDoc>('users');
   return {
     async upsertFromGoogle(identity, now) {
-      const doc = await users.findOneAndUpdate(
-        { googleSub: identity.sub },
-        {
-          $set: {
-            email: identity.email,
-            name: identity.name,
-            avatarUrl: identity.picture,
-            lastLoginAt: now,
+      const run = () =>
+        users.findOneAndUpdate(
+          { googleSub: identity.sub },
+          {
+            $set: {
+              email: identity.email,
+              name: identity.name,
+              avatarUrl: identity.picture,
+              lastLoginAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+              settings: structuredClone(DEFAULT_SETTINGS),
+              onboardingCompletedAt: null,
+            },
           },
-          $setOnInsert: {
-            createdAt: now,
-            settings: structuredClone(DEFAULT_SETTINGS),
-            onboardingCompletedAt: null,
-          },
-        },
-        { upsert: true, returnDocument: 'after' },
-      );
-      return doc as UserDoc;
+          { upsert: true, returnDocument: 'after' },
+        );
+      try {
+        return (await run()) as UserDoc;
+      } catch (e) {
+        // Concurrent first sign-in with the same sub: the other upsert won.
+        if ((e as { code?: number }).code !== 11000) throw e;
+        return (await run()) as UserDoc;
+      }
     },
     findById(id) {
       return users.findOne({ _id: id });
