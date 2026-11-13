@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import type { AppDeps } from './core/deps';
 import { requestId } from './core/middleware/request-id';
 import { errorHandler, notFoundHandler } from './core/middleware/error-handler';
+import { authRouter } from './modules/auth/auth.routes';
 import { healthRouter } from './modules/health/health.routes';
 
 export function createApp(
@@ -17,6 +18,7 @@ export function createApp(
   app.use(express.json({ limit: '1mb' }));
 
   app.use(healthRouter(deps));
+  app.use('/v1/auth', authRouter(deps));
   extraRoutes?.(app);
 
   app.use(notFoundHandler);

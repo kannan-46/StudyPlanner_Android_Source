@@ -1,7 +1,10 @@
 import type { Db } from 'mongodb';
 import { loadConfig, type AppConfig } from '../config/env';
 import { createMongo } from './db/mongo';
-import { AppError } from './errors/app-error';
+import {
+  createDevGoogleStub,
+  createGoogleVerifier,
+} from '../modules/auth/google-verifier';
 
 export interface GoogleIdentity {
   sub: string;
@@ -20,21 +23,15 @@ export interface AppDeps {
   now: () => Date;
 }
 
-// Placeholder until Task 5 implements the real verifier.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function createGoogleVerifier(_config: AppConfig): GoogleVerifier {
-  return async () => {
-    throw new AppError('GOOGLE_TOKEN_INVALID');
-  };
-}
-
 export function productionDeps(): AppDeps {
   const config = loadConfig(process.env);
   const mongo = createMongo(config);
   return {
     config,
     getDb: () => mongo.getDb(),
-    googleVerifier: createGoogleVerifier(config),
+    googleVerifier: config.devGoogleStub
+      ? createDevGoogleStub()
+      : createGoogleVerifier(config.googleWebClientId),
     now: () => new Date(),
   };
 }

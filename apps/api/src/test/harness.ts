@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
+import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { AuthResponse } from '@planner/shared';
 import { createMongo } from '../core/db/mongo';
@@ -54,10 +55,12 @@ export function makeTestDeps(
   };
 }
 
-export async function signIn(
-  _app: Express,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _sub = 'user-1',
-): Promise<AuthResponse> {
-  throw new Error('signIn not implemented until Task 5');
+export async function signIn(app: Express, sub = 'u1'): Promise<AuthResponse> {
+  const res = await request(app)
+    .post('/v1/auth/google')
+    .send({ idToken: `google:${sub}:${sub}@test.dev` });
+  if (res.status !== 200) {
+    throw new Error(`signIn failed with ${res.status}`);
+  }
+  return res.body as AuthResponse;
 }
