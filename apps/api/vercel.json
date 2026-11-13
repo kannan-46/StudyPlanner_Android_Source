@@ -12,7 +12,7 @@
   "routes": [
     {
       "src": "/api/server/(?<path>.*)",
-      "dest": "/api/server",
+      "dest": "/api",
       "transforms": [
         {
           "type": "request.path",
