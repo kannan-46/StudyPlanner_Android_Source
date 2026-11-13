@@ -18,6 +18,7 @@ import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { useExams } from '../exams/hooks';
+import { renderRevisionRow } from '../revisions/RevisionRow';
 import { useSubjects } from '../subjects/hooks';
 import { useDeleteTopic, useTopic } from './hooks';
 
@@ -153,7 +154,7 @@ export function TopicDetailContent({
         </Text>
         <RevisionTimeline
           revisions={t.revisions}
-          renderRevision={renderRevision}
+          renderRevision={renderRevision ?? renderRevisionRow(t.id)}
         />
       </Card>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
