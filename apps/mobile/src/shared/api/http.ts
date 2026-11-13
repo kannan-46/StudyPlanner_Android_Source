@@ -95,7 +95,10 @@ export function createHttp(opts: {
           return next;
         } catch (e) {
           // Transient failures (offline, server trouble) keep the session.
-          if (e instanceof ApiError && (e.code === 'NETWORK' || e.status >= 500)) {
+          if (
+            e instanceof ApiError &&
+            (e.code === 'NETWORK' || e.status >= 500)
+          ) {
             throw e;
           }
           await tokens.clear();

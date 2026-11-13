@@ -211,7 +211,9 @@ describe('http client', () => {
         return res(200, { accessToken: 't2', refreshToken: 'r2' });
       }
       const auth = (init.headers as Record<string, string>).Authorization;
-      return auth === 'Bearer t2' ? res(200, { ok: true }) : err(401, 'TOKEN_EXPIRED');
+      return auth === 'Bearer t2'
+        ? res(200, { ok: true })
+        : err(401, 'TOKEN_EXPIRED');
     });
     await http.get('/v1/b');
     expect(refreshCalls).toBe(2);

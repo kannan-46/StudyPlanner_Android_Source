@@ -15,7 +15,8 @@ export class ApiError extends Error {
     extra: { details?: unknown; requestId?: string } = {},
   ) {
     super(
-      message ?? (code === 'NETWORK' ? NETWORK_MESSAGE : ERROR_CODES[code].message),
+      message ??
+        (code === 'NETWORK' ? NETWORK_MESSAGE : ERROR_CODES[code].message),
     );
     this.name = 'ApiError';
     this.code = code;
