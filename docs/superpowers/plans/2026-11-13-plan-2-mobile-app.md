@@ -75,6 +75,22 @@
   - Debug build: `cd apps/mobile/android && ./gradlew assembleDebug`.
   - If the Android SDK isn't installed on the machine, report the Gradle steps as not run. Don't fake them.
 - **Build environment on this machine** (already installed, not on PATH): before any Gradle command, run `export JAVA_HOME="/d/StudyPlannerApkBuild/jdk/jdk-17.0.21+9" ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"; export PATH="$JAVA_HOME/bin:$PATH"`. The SDK has platform `android-37.0` and build-tools 36.0.0 / 37.0.0. If `android/local.properties` is missing, create it with `sdk.dir=` pointing at that SDK; the file is git-ignored.
+- **Responsive design (user request 2026-11-13, applies to every screen from Task 4 on):**
+  - Supported screens:
+    - small phones down to 320 dp wide
+    - normal phones
+    - foldables and tablets (≥ 600 dp)
+    - large tablets (≥ 900 dp)
+    - portrait and landscape
+  - Use `useResponsive()` from `src/shared/ui/responsive.ts`, which returns `{ width, height, size: 'compact'|'medium'|'expanded', isLandscape, fontScale }` (compact < 600 dp, medium 600–899, expanded ≥ 900). It's driven by `useWindowDimensions`, so rotation and fold changes re-render.
+  - Content is centred with `maxWidth` 720 on medium/expanded for forms and settings. Lists may use 2 columns on medium and expanded.
+  - Topics and Schedule show master–detail side by side on expanded: list on the left, topic detail on the right.
+  - Never hard-code a screen width or height. Use flex, percentages and `spacing` tokens.
+  - Text respects the system font scale (don't set `allowFontScaling={false}`). Layouts must not clip at `fontScale` 1.3: wrap rows, no fixed text heights.
+  - Touch targets are ≥ 48 dp.
+  - Safe areas, including notches and gesture bars, are handled by `Screen`.
+  - Keyboard: forms use `KeyboardAvoidingView` or scroll so the focused field and the Save button stay visible on small phones.
+  - Each screen task adds at least one test rendering at 320 dp, and one at ≥ 900 dp where the layout differs, by mocking `useWindowDimensions`.
 - **Formatting:** the repo prettier config (single quotes, trailing commas, width 80, `arrowParens: avoid`).
 
 ## Review Focus
