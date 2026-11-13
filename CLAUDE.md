@@ -29,7 +29,7 @@ Express + MongoDB API deployed on Vercel.
 - Limits: 5,000 topics per user; topic names 1-200 chars, notes <= 2,000;
   exam/subject names 1-80; mock test titles 1-120, notes <= 1,000; snooze 1-30
   days; agenda range 1-90 days (default 30).
-- Tokens: access = HS256 JWT, 15 min, issuer `studyplanner-api`, audience
+- Tokens: access = HS256 JWT, 7 days, issuer `studyplanner-api`, audience
   `studyplanner-mobile`, `sub` = userId. Refresh = 32 random bytes base64url,
   60 days, only the SHA-256 hex digest is stored.
 - Database name `studyplanner` (env `MONGODB_DB`). Never touch the old `users`

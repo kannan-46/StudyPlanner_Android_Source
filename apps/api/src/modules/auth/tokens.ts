@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify, errors } from 'jose';
 import { AppError } from '../../core/errors/app-error';
 
-export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+export const ACCESS_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 const ISSUER = 'studyplanner-api';
 const AUDIENCE = 'studyplanner-mobile';
 

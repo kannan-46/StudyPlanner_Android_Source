@@ -137,7 +137,7 @@ apps/api/
 **Auth flow**
 1. The app uses native Google sign-in and gets an ID token. The token's audience is the Web client ID.
 2. `POST /v1/auth/google {idToken}`. The server verifies the token with `google-auth-library` (free) and upserts the user by `googleSub`.
-3. The server returns `{accessToken (15 min JWT), refreshToken (opaque, 60 days), user}`.
+3. The server returns `{accessToken (7-day JWT), refreshToken (opaque, 60 days), user}`.
 4. `POST /v1/auth/refresh` rotates the refresh token. The server stores only its SHA-256 hash. If a revoked token is reused, all of that user's sessions are revoked.
 5. `POST /v1/auth/logout` revokes the refresh token.
 6. On the device, tokens live in `react-native-keychain` (already a dependency).

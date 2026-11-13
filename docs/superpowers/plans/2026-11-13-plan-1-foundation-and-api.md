@@ -37,7 +37,7 @@
   - Mock test titles 1–120 chars, notes ≤ 1,000 chars.
   - Snooze is 1–30 days. The agenda range is 1–90 days (default 30).
 - **Tokens:**
-  - Access tokens are HS256 JWTs valid for 15 minutes, with issuer `studyplanner-api`, audience `studyplanner-mobile` and `sub` = userId.
+  - Access tokens are HS256 JWTs valid for 7 days (changed from 15 minutes on 2026-11-13 by user decision), with issuer `studyplanner-api`, audience `studyplanner-mobile` and `sub` = userId.
   - Refresh tokens are 32 random bytes in base64url, valid for 60 days. Only their SHA-256 hex digest is stored.
 - **Database name:** `studyplanner` by default (env `MONGODB_DB`). Never touch the old `users` and `planners` collections in other databases.
 - **Error body:** always `{ error: { code, message, details? }, requestId }`, plus an `X-Request-Id` header. Never leak stack traces or driver errors.

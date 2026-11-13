@@ -118,11 +118,26 @@ describe('auth', () => {
     expect(res.status).toBe(401);
   });
 
+  it('accepts an access token signed 6 days 23 hours ago', async () => {
+    const { app, deps } = build();
+    const auth = await signIn(app);
+    const recent = await signAccessToken(
+      auth.user.id,
+      new Date(deps.now().getTime() - (7 * 24 - 1) * 60 * 60 * 1000),
+      deps.config.jwtSecret,
+    );
+    const res = await request(app)
+      .get('/probe')
+      .set('Authorization', `Bearer ${recent}`);
+    expect(res.status).toBe(200);
+    expect(res.body.userId).toBe(auth.user.id);
+  });
+
   it('rejects expired and missing access tokens', async () => {
     const { app, deps } = build();
     const old = await signAccessToken(
       'abc',
-      new Date(deps.now().getTime() - 16 * 60 * 1000),
+      new Date(deps.now().getTime() - (7 * 24 * 60 + 1) * 60 * 1000),
       deps.config.jwtSecret,
     );
     const expired = await request(app)
