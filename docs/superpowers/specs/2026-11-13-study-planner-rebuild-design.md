@@ -321,9 +321,9 @@ apps/mobile/src/
   - Done revisions become `doneOn = completedAt ?? date`.
   - Pending ones are recalculated by `rebuildSchedule` from the last `doneOn`. That is the chosen rule, and it ends old overdue pile-ups.
   - Imported topics store `legacyId`, so a `merge` import of the same file twice doesn't duplicate them.
-- **Work happens on branch `rebuild`.**
-  - Vercel deploys `main`, and the current app still uses the live API.
-  - The branch is merged only at Phase 8, together with the Vercel Root Directory switch.
+- **All work happens directly on `main` (user decision, no separate branches).**
+  - Vercel deploys `main` on every push, and the current app still uses the live API.
+  - Commits therefore stay local, and nothing is pushed until Phase 8. At that point the push is done together with the Vercel Root Directory switch, after the user has exported a backup.
 
 ## 15. Left to the builder
 - Exact component styling within the theme tokens.
