@@ -2,9 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "outputDirectory": "public",
+  "buildCommand": "npm run build -w @planner/shared",
+  "installCommand": "npm install --prefix ../.. --workspaces --include-workspace-root",
   "functions": {
-    "api/server.ts": {
-      "maxDuration": 300
+    "api/index.ts": {
+      "maxDuration": 10
     }
   },
   "routes": [

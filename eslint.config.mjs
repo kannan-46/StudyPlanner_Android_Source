@@ -10,8 +10,6 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       'apps/mobile/**',
-      // Legacy API sources are replaced in Plan 1 Task 4; re-enable then.
-      'apps/api/**',
     ],
   },
   js.configs.recommended,

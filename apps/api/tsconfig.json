@@ -1,16 +1,9 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": "src",
-    "outDir": "dist",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node", "jest"],
+    "noEmit": true,
+    "paths": { "@planner/shared": ["../../packages/shared/src"] }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src", "api"]
 }
