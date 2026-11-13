@@ -19,8 +19,16 @@ export type MainTabParamList = {
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const glyph = (color: string) => (
-  <Text style={{ color, fontSize: 16 }}>●</Text>
+const GLYPHS: Record<keyof MainTabParamList, string> = {
+  Home: '⌂',
+  Schedule: '▦',
+  Topics: '☰',
+  Progress: '◔',
+  Settings: '⚙',
+};
+
+const glyph = (name: keyof MainTabParamList, color: string) => (
+  <Text style={{ color, fontSize: 18 }}>{GLYPHS[name]}</Text>
 );
 
 export function MainTabs() {
@@ -28,13 +36,13 @@ export function MainTabs() {
   const { colors } = useTheme();
   return (
     <Tab.Navigator
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: { backgroundColor: colors.surface },
-        tabBarIcon: ({ color }) => glyph(color),
-      }}
+        tabBarIcon: ({ color }) => glyph(route.name, color),
+      })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Schedule" component={ScheduleScreen} />

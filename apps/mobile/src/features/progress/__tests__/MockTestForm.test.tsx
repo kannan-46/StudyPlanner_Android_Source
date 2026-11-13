@@ -52,4 +52,20 @@ describe('MockTestForm', () => {
       examId: ID(11),
     });
   });
+
+  it('accepts a decimal comma in score fields', async () => {
+    const http = makeHttp();
+    http.post.mockResolvedValue({ id: ID(5) });
+    await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText('Score'), '72,5');
+    await fireEvent.changeText(screen.getByLabelText('Max score'), '100,0');
+    await fireEvent.press(await screen.findByText('MS General Surgery'));
+    await fireEvent.press(screen.getByText('Save'));
+    await waitFor(() => expect(http.post).toHaveBeenCalled());
+    expect(http.post.mock.calls[0][1]).toMatchObject({
+      score: 72.5,
+      maxScore: 100,
+    });
+  });
 });

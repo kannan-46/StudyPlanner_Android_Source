@@ -1,3 +1,4 @@
+import { waitFor } from '@testing-library/react-native';
 import { createHttp } from '../http';
 import { ApiError, userMessage } from '../errors';
 import type { Tokens } from '../tokenStore';
@@ -32,10 +33,14 @@ describe('http client', () => {
   it('shares one refresh across parallel 401s and retries each', async () => {
     const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
     let refreshCalls = 0;
+    let releaseRefresh!: () => void;
+    const refreshGate = new Promise<void>(r => {
+      releaseRefresh = r;
+    });
     const fetchImpl = jest.fn(async (url: string, init: RequestInit) => {
       if (url.endsWith('/v1/auth/refresh')) {
         refreshCalls++;
-        await new Promise<void>(r => setTimeout(r, 10));
+        await refreshGate;
         return res(200, { accessToken: 'new', refreshToken: 'r2' });
       }
       const auth = (init.headers as Record<string, string>).Authorization;
@@ -48,11 +53,14 @@ describe('http client', () => {
       onSessionEnded: jest.fn(),
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    const out = await Promise.all([
+    const pending = Promise.all([
       http.get<{ path: string }>('/v1/a'),
       http.get<{ path: string }>('/v1/b'),
       http.get<{ path: string }>('/v1/c', { x: 1, y: undefined }),
     ]);
+    await waitFor(() => expect(refreshCalls).toBe(1));
+    releaseRefresh();
+    const out = await pending;
     expect(refreshCalls).toBe(1);
     expect(out.map(o => o.path)).toEqual([
       `${base}/v1/a`,
@@ -297,5 +305,66 @@ describe('http client', () => {
     expect(
       fetchImpl.mock.calls.filter(c => String(c[0]).endsWith('/refresh')),
     ).toHaveLength(1);
+  });
+
+  it.each([
+    [429, 'RATE_LIMITED'],
+    [400, 'VALIDATION_FAILED'],
+  ])('keeps the session when refresh answers %s', async (status, code) => {
+    const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
+    const onSessionEnded = jest.fn();
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('/v1/auth/refresh')
+        ? err(status, code)
+        : err(401, 'TOKEN_EXPIRED'),
+    );
+    const http = createHttp({
+      baseUrl: base,
+      tokens,
+      onSessionEnded,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(http.get('/v1/a')).rejects.toMatchObject({ status });
+    expect(onSessionEnded).not.toHaveBeenCalled();
+    expect(tokens.clear).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session when refresh returns 200 with an unparseable body', async () => {
+    const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
+    const onSessionEnded = jest.fn();
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('/v1/auth/refresh')
+        ? res(200, undefined, '<html>')
+        : err(401, 'TOKEN_EXPIRED'),
+    );
+    const http = createHttp({
+      baseUrl: base,
+      tokens,
+      onSessionEnded,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(http.get('/v1/a')).rejects.toBeInstanceOf(ApiError);
+    expect(onSessionEnded).not.toHaveBeenCalled();
+  });
+
+  it('still ends the session when clearing tokens throws', async () => {
+    const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
+    tokens.clear.mockRejectedValue(new Error('keychain'));
+    const onSessionEnded = jest.fn();
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('/v1/auth/refresh')
+        ? err(401, 'UNAUTHENTICATED')
+        : err(401, 'TOKEN_EXPIRED'),
+    );
+    const http = createHttp({
+      baseUrl: base,
+      tokens,
+      onSessionEnded,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(http.get('/v1/a')).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+    });
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
   });
 });

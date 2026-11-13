@@ -18,7 +18,8 @@ type Field = 'title' | 'takenOn' | 'score' | 'maxScore' | 'form';
 type Errors = Partial<Record<Field, string>>;
 
 const FIELDS: string[] = ['title', 'takenOn', 'score', 'maxScore'];
-const toNumber = (t: string) => (t.trim() === '' ? NaN : Number(t));
+const toNumber = (t: string) =>
+  t.trim() === '' ? NaN : Number(t.trim().replace(',', '.'));
 
 export function MockTestForm({ onSaved }: { onSaved: () => void }) {
   const { colors, spacing } = useTheme();

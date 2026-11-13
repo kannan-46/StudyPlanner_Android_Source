@@ -230,4 +230,24 @@ describe('auth', () => {
     }
     expect(last).toBe(429);
   });
+
+  it('does not count refresh/logout against the sign-in limit', async () => {
+    const { app } = build();
+    for (let i = 0; i < 25; i++) {
+      await request(app)
+        .post('/v1/auth/refresh')
+        .send({ refreshToken: 'x'.repeat(20) });
+    }
+    const res = await request(app).post('/v1/auth/google').send({});
+    expect(res.status).not.toBe(429);
+  });
+
+  it('rate limits refresh after 300 requests', async () => {
+    const { app } = build();
+    let last = 0;
+    for (let i = 0; i < 301; i++) {
+      last = (await request(app).post('/v1/auth/logout').send({})).status;
+    }
+    expect(last).toBe(429);
+  });
 });

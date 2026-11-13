@@ -38,6 +38,10 @@ Two values are baked into `BuildConfig`, set either in
 keytool -list -v -keystore android/app/debug.keystore \
   -alias androiddebugkey -storepass android -keypass android
 ```
+Note: `android/app/debug.keystore` is the standard, public React Native debug
+key (well-known passwords), not a release key. It must never be used to sign a
+release build; the release keystore is created in Plan 3.
+
 
 Register the SHA-1 and package `com.surgicalstudyplanner.app` as an Android
 OAuth client in Google Cloud. A release keystore (and its SHA-1) comes in

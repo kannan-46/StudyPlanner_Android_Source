@@ -14,21 +14,36 @@ export function authRouter(deps: AppDeps): Router {
   const router = Router();
   const controller = createAuthController(deps);
 
-  router.use(
+  // Sign-in is the expensive, abusable call. Refresh/logout are routine and
+  // may come from many users behind one NAT, so they get a roomier budget.
+  const limiter = (limit: number) =>
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      limit: 20,
+      limit,
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       handler: (_req, _res, next) => next(new AppError('RATE_LIMITED')),
-    }),
-  );
+    });
+  const signInLimiter = limiter(20);
+  const sessionLimiter = limiter(300);
+
   router.post(
     '/google',
+    signInLimiter,
     validate(googleSignInSchema, 'body'),
     controller.google,
   );
-  router.post('/refresh', validate(refreshSchema, 'body'), controller.refresh);
-  router.post('/logout', validate(logoutSchema, 'body'), controller.logout);
+  router.post(
+    '/refresh',
+    sessionLimiter,
+    validate(refreshSchema, 'body'),
+    controller.refresh,
+  );
+  router.post(
+    '/logout',
+    sessionLimiter,
+    validate(logoutSchema, 'body'),
+    controller.logout,
+  );
   return router;
 }

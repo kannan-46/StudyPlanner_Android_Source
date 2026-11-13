@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWindowDimensions } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { ReminderHealthScreen } from '../ReminderHealthScreen';
 import {
   getReminderStatus,
@@ -86,6 +86,25 @@ it('test notification: success and notifications-off error', async () => {
   ).toBeTruthy();
 });
 
+it('shows a loading state, not Fix rows, until the status resolves', async () => {
+  let resolve!: (v: unknown) => void;
+  (getReminderStatus as jest.Mock).mockReturnValue(
+    new Promise(r => {
+      resolve = r;
+    }),
+  );
+  await renderWithProviders(<ReminderHealthScreen />, makeHttp());
+  expect(screen.getByText('Checking reminder status…')).toBeTruthy();
+  expect(screen.queryByText('Off — Fix')).toBeNull();
+  await act(async () => {
+    resolve(status());
+  });
+  await waitFor(() =>
+    expect(screen.queryByText('Checking reminder status…')).toBeNull(),
+  );
+  expect(screen.queryByText('Off — Fix')).toBeNull();
+});
+
 it('renders at 320 dp with font scale 1.3 and at 1000 dp', async () => {
   mockDims(320, 1.3);
   const { unmount } = await renderWithProviders(
@@ -93,10 +112,10 @@ it('renders at 320 dp with font scale 1.3 and at 1000 dp', async () => {
     makeHttp(),
   );
   expect(await screen.findByText('Send test notification')).toBeTruthy();
-  unmount();
+  await act(async () => {
+    unmount();
+  });
   mockDims(1000);
   await renderWithProviders(<ReminderHealthScreen />, makeHttp());
-  await waitFor(() =>
-    expect(screen.getByText('Send test notification')).toBeTruthy(),
-  );
+  expect(await screen.findByText('Send test notification')).toBeTruthy();
 });

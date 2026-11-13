@@ -186,7 +186,7 @@ export function SettingsScreen() {
   if (meQ.isLoading) {
     return (
       <Screen scroll>
-        <ActivityIndicator />
+        <ActivityIndicator accessibilityLabel="Loading" />
       </Screen>
     );
   }
@@ -330,7 +330,9 @@ export function SettingsScreen() {
       <Dialog
         visible={deleteOpen}
         title="Delete account?"
-        onRequestClose={() => setDeleteOpen(false)}
+        onRequestClose={() => {
+          if (!deleting) setDeleteOpen(false);
+        }}
         actions={
           <>
             <Button
@@ -343,6 +345,7 @@ export function SettingsScreen() {
             <Button
               title="Cancel"
               variant="text"
+              disabled={deleting}
               onPress={() => setDeleteOpen(false)}
             />
           </>

@@ -111,7 +111,9 @@ export function ReminderHealthScreen() {
   return (
     <Screen scroll>
       <Card style={{ marginBottom: spacing.lg }}>
-        {loaded && !status ? (
+        {!loaded ? (
+          <Text style={{ color: colors.muted }}>Checking reminder status…</Text>
+        ) : !status ? (
           <Text style={{ color: colors.muted }}>
             Reminder status isn't available on this device.
           </Text>

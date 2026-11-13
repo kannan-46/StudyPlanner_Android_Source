@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { DEFAULT_SETTINGS } from '@planner/shared';
 import { BackupSection } from '../BackupSection';
 import { pickBackupFile, saveBackupFile } from '../../../native/backupFiles';
 import {
@@ -13,7 +14,15 @@ jest.mock('../../../native/backupFiles', () => ({
   saveBackupFile: jest.fn(),
 }));
 
-const data = { version: 1, topics: [] };
+const data = {
+  format: 'studyplanner.backup.v1',
+  exportedAt: '2026-11-13T10:00:00.000Z',
+  settings: DEFAULT_SETTINGS,
+  exams: [],
+  subjects: [],
+  topics: [],
+  mockTests: [],
+};
 afterEach(cleanupClients);
 beforeEach(() => {
   jest.clearAllMocks();
@@ -108,4 +117,39 @@ it('export saves the file and confirms', async () => {
   await fireEvent.press(screen.getByText('Export backup'));
   expect(await screen.findByText('Backup saved')).toBeTruthy();
   expect(saveBackupFile).toHaveBeenCalledWith(JSON.stringify(data, null, 2));
+});
+
+it('Export first cancelled in the save dialog does not import', async () => {
+  const http = setup();
+  http.get.mockResolvedValue(data);
+  (saveBackupFile as jest.Mock).mockRejectedValue({ code: 'E_CANCELLED' });
+  await renderWithProviders(<BackupSection />, http);
+  await fireEvent.press(screen.getByText('Import backup'));
+  await fireEvent.press(await screen.findByText('Replace everything'));
+  await fireEvent.press(await screen.findByText('Export first'));
+  await waitFor(() => expect(saveBackupFile).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByText('Export first')).toBeNull());
+  expect(importCalls(http)).toHaveLength(0);
+});
+
+it('valid JSON that is not a backup is rejected client-side', async () => {
+  const http = setup();
+  (pickBackupFile as jest.Mock).mockResolvedValue('{"version":1,"topics":[]}');
+  await renderWithProviders(<BackupSection />, http);
+  await fireEvent.press(screen.getByText('Import backup'));
+  expect(
+    await screen.findByText('This file is not a Study Planner backup'),
+  ).toBeTruthy();
+  expect(screen.queryByText('Merge (recommended)')).toBeNull();
+  expect(importCalls(http)).toHaveLength(0);
+});
+
+it('never shows a raw error message when saving fails', async () => {
+  const http = setup();
+  http.get.mockResolvedValue(data);
+  (saveBackupFile as jest.Mock).mockRejectedValue(new Error('EACCES /secret'));
+  await renderWithProviders(<BackupSection />, http);
+  await fireEvent.press(screen.getByText('Export backup'));
+  expect(await screen.findByText("Couldn't save the backup file")).toBeTruthy();
+  expect(screen.queryByText(/EACCES/)).toBeNull();
 });

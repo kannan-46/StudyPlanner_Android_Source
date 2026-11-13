@@ -94,14 +94,16 @@ export function createHttp(opts: {
           }
           return next;
         } catch (e) {
-          // Transient failures (offline, server trouble) keep the session.
-          if (
-            e instanceof ApiError &&
-            (e.code === 'NETWORK' || e.status >= 500)
-          ) {
-            throw e;
+          // Only an explicit 401 means the refresh token is dead. Everything
+          // else (offline, 429, 5xx, bad body) is transient: keep the session.
+          if (!(e instanceof ApiError) || e.status !== 401) {
+            throw e instanceof ApiError ? e : new ApiError('INTERNAL', 500);
           }
-          await tokens.clear();
+          try {
+            await tokens.clear();
+          } catch {
+            // Storage failure must not stop the session from ending.
+          }
           onSessionEnded();
           throw new ApiError('UNAUTHENTICATED', 401);
         } finally {

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
+import { parseBackup } from '@planner/shared';
 import { Button } from '../../shared/ui/Button';
 import { Dialog } from '../../shared/ui/Dialog';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
-import { userMessage } from '../../shared/api/errors';
+import { ApiError, userMessage } from '../../shared/api/errors';
 import { pickBackupFile, saveBackupFile } from '../../native/backupFiles';
 import { useExportBackup, useImportBackup } from '../backup/hooks';
 
@@ -19,7 +20,7 @@ export function BackupSection() {
   const exporter = useExportBackup();
   const importer = useImportBackup();
   const [step, setStep] = useState<Step>('none');
-  const [data, setData] = useState<unknown>(null);
+  const dataRef = useRef<unknown>(null);
   const [busy, setBusy] = useState(false);
 
   /** Returns true when a file was written. */
@@ -33,7 +34,9 @@ export function BackupSection() {
       if (!isCancel(e)) {
         snackbar.show({
           message:
-            e instanceof Error && !('code' in e) ? e.message : userMessage(e),
+            e instanceof ApiError
+              ? userMessage(e)
+              : "Couldn't save the backup file",
         });
       }
       return false;
@@ -57,21 +60,19 @@ export function BackupSection() {
         text = await pickBackupFile();
       } catch (e) {
         if (!isCancel(e)) {
-          snackbar.show({ message: "Couldn't open that file" });
+          snackbar.show({ message: "Couldn't read the backup file" });
         }
         return;
       }
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
+        parseBackup(parsed);
       } catch {
-        parsed = null;
-      }
-      if (parsed === null || typeof parsed !== 'object') {
         snackbar.show({ message: 'This file is not a Study Planner backup' });
         return;
       }
-      setData(parsed);
+      dataRef.current = parsed;
       setStep('mode');
     } finally {
       setBusy(false);
@@ -87,10 +88,15 @@ export function BackupSection() {
         message: `Imported ${r.imported.topics} topics (${r.skipped.topics} skipped)`,
       });
     } catch (e) {
-      snackbar.show({ message: userMessage(e) });
+      snackbar.show({
+        message:
+          e instanceof ApiError
+            ? userMessage(e)
+            : "Couldn't read the backup file",
+      });
     } finally {
       setBusy(false);
-      setData(null);
+      dataRef.current = null;
     }
   }
 
@@ -103,13 +109,13 @@ export function BackupSection() {
     } finally {
       setBusy(false);
     }
-    if (ok) await doImport('replace', data);
-    else setData(null);
+    if (ok) await doImport('replace', dataRef.current);
+    else dataRef.current = null;
   }
 
   const cancel = () => {
     setStep('none');
-    setData(null);
+    dataRef.current = null;
   };
 
   return (
@@ -137,7 +143,7 @@ export function BackupSection() {
           <>
             <Button
               title="Merge (recommended)"
-              onPress={() => doImport('merge', data)}
+              onPress={() => doImport('merge', dataRef.current)}
             />
             <Button
               title="Replace everything"
@@ -163,7 +169,7 @@ export function BackupSection() {
             <Button
               title="Continue without export"
               variant="danger"
-              onPress={() => doImport('replace', data)}
+              onPress={() => doImport('replace', dataRef.current)}
             />
             <Button title="Cancel" variant="text" onPress={cancel} />
           </>

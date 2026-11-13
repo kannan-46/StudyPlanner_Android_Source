@@ -349,15 +349,31 @@ describe('relaunch-safe setup', () => {
 
   it('ignores a second Finish press while pending', async () => {
     const http = makeHttp([topic()]);
+    let release!: () => void;
     http.patch.mockImplementation(
-      () => new Promise(resolve => setTimeout(() => resolve({}), 30)),
+      () =>
+        new Promise(resolve => {
+          release = () => resolve({});
+        }),
     );
     await renderWithProviders(<TopicsStep />, http);
     await screen.findByText('Added: 1 topic');
-    await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
-    await fireEvent.press(screen.getByText('Skip for now'));
-    await waitFor(() => expect(refreshUser).toHaveBeenCalledTimes(1));
+    // fireEvent awaits the pending async handler, so keep the first press
+    // un-awaited while the request is held open by the deferred promise.
+    const firstPress = fireEvent.press(
+      screen.getByRole('button', { name: 'Finish' }),
+    );
+    await waitFor(() => expect(http.patch).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole('button', { name: 'Skip for now' }).props
+        .accessibilityState.disabled,
+    ).toBe(true);
+    await waitFor(() => {
+      release(); // idempotent: lets the held request resolve inside waitFor
+      expect(refreshUser).toHaveBeenCalledTimes(1);
+    });
     expect(http.patch).toHaveBeenCalledTimes(1);
+    await firstPress;
   });
 
   it('defaults reminder settings from the user', async () => {

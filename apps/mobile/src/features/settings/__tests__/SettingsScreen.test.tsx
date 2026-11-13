@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWindowDimensions } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { DEFAULT_SETTINGS } from '@planner/shared';
 import { ApiError } from '../../../shared/api/errors';
 import { useAuth } from '../../auth/AuthProvider';
@@ -154,6 +154,30 @@ it('delete account stays disabled until DELETE is typed', async () => {
   await waitFor(() => expect(signOut).toHaveBeenCalled());
 });
 
+it('delete dialog cannot be dismissed while deleting', async () => {
+  const http = setup();
+  let release!: () => void;
+  http.del.mockImplementation(
+    () =>
+      new Promise<void>(r => {
+        release = r;
+      }),
+  );
+  await renderWithProviders(<SettingsScreen />, http);
+  await fireEvent.press(await screen.findByText('Delete account'));
+  await fireEvent.changeText(screen.getByLabelText('Type DELETE'), 'DELETE');
+  fireEvent.press(screen.getByText('Delete forever'));
+  await waitFor(() => expect(http.del).toHaveBeenCalled());
+  expect(isDisabled('Cancel')).toBe(true);
+  // Hardware back press on the modal.
+  await fireEvent(screen.getByText('Cancel'), 'requestClose');
+  expect(screen.getByText('Cancel')).toBeTruthy();
+  await act(async () => {
+    release();
+  });
+  await waitFor(() => expect(signOut).toHaveBeenCalled());
+});
+
 it('sign out and navigation links work', async () => {
   await renderWithProviders(<SettingsScreen />, setup());
   await fireEvent.press(await screen.findByText('Sign out'));
@@ -168,7 +192,9 @@ it('renders at 320 dp / font scale 1.3 and at 1000 dp', async () => {
   mockDims(320, 1.3);
   const { unmount } = await renderWithProviders(<SettingsScreen />, setup());
   expect(await screen.findByText('Sign out')).toBeTruthy();
-  unmount();
+  await act(async () => {
+    unmount();
+  });
   mockDims(1000);
   await renderWithProviders(<SettingsScreen />, setup());
   expect(await screen.findByText('Sign out')).toBeTruthy();

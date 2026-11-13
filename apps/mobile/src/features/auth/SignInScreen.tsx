@@ -10,8 +10,8 @@ import { GoogleAuthError } from '../../native/googleAuth';
 import { useAuth } from './AuthProvider';
 
 function errorText(e: unknown): string | null {
-  if (e instanceof GoogleAuthError || (e as { code?: string })?.code?.startsWith?.('E_')) {
-    switch ((e as GoogleAuthError).code) {
+  if (e instanceof GoogleAuthError) {
+    switch (e.code) {
       case 'E_CANCELLED':
         return null;
       case 'E_NO_ACCOUNT':
@@ -52,7 +52,8 @@ export function SignInScreen() {
           flexGrow: 1,
           justifyContent: 'center',
           gap: spacing.lg,
-          paddingVertical: isLandscape || height < 500 ? spacing.lg : spacing.xxl,
+          paddingVertical:
+            isLandscape || height < 500 ? spacing.lg : spacing.xxl,
         }}
       >
         <Text
