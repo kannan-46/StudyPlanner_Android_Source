@@ -350,7 +350,7 @@ describe('topics', () => {
         await bump();
         return { notes: 'never' };
       }),
-    ).rejects.toMatchObject({ code: 'REVISION_OUT_OF_ORDER' });
+    ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
     expect(calls2).toBe(2);
   });
 });

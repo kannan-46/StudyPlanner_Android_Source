@@ -18,6 +18,7 @@ export function createAgendaService(deps: AppDeps) {
           status: 'active',
           nextDueOn: { $lte: addDays(today, days) },
         })
+        .collation({ locale: 'en', strength: 2 })
         .sort({ nextDueOn: 1, name: 1, _id: 1 })
         .toArray();
       if (topics.length === 0) return [];

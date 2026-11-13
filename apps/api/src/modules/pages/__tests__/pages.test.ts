@@ -15,6 +15,15 @@ describe('public pages', () => {
     );
   });
 
+  it('does not claim server-sent reminders and lists contact once', async () => {
+    const deps = makeTestDeps();
+    deps.config.contactEmail = 'help@example.com';
+    const res = await request(createApp(deps)).get('/privacy');
+    expect(res.text).not.toMatch(/send the reminders/);
+    expect(res.text.split('help@example.com').length - 1).toBe(2); // href + text, once
+    expect(res.text).toContain('profile picture URL');
+  });
+
   it('shows a fallback contact line when CONTACT_EMAIL is unset', async () => {
     const res = await request(createApp(makeTestDeps())).get('/privacy');
     expect(res.text).toContain(
@@ -30,11 +39,18 @@ describe('public pages', () => {
     expect(res.text).not.toContain('<x>');
   });
 
-  it('serves the home page linking to ./privacy', async () => {
+  it('serves the home page linking to /privacy locally and /api/server/privacy on Vercel', async () => {
     const res = await request(createApp(makeTestDeps())).get('/');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html; charset=utf-8/);
     expect(res.text).toContain('<title>Study Planner</title>');
-    expect(res.text).toContain('href="./privacy"');
+    expect(res.text).toContain('href="/privacy"');
+    process.env.VERCEL = '1';
+    try {
+      const v = await request(createApp(makeTestDeps())).get('/');
+      expect(v.text).toContain('href="/api/server/privacy"');
+    } finally {
+      delete process.env.VERCEL;
+    }
   });
 });

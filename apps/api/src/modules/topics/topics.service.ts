@@ -47,7 +47,7 @@ export function createTopicsService(deps: AppDeps) {
         return { ...doc, ...next, version: doc.version + 1 };
       }
     }
-    throw new AppError('REVISION_OUT_OF_ORDER');
+    throw new AppError('VERSION_CONFLICT');
   }
 
   const scheduleOf = (d: TopicDoc) => ({

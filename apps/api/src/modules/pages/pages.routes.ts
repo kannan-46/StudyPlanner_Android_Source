@@ -2,7 +2,7 @@ import { Router } from 'express';
 import helmet from 'helmet';
 import type { AppDeps } from '../../core/deps';
 import { renderHomePage } from './home.html';
-import { renderPrivacyPage } from './privacy.html';
+import { publicBasePath, renderPrivacyPage } from './privacy.html';
 
 export function pagesRouter(deps: AppDeps): Router {
   const router = Router();
@@ -12,7 +12,9 @@ export function pagesRouter(deps: AppDeps): Router {
   });
 
   router.get('/', csp, (_req, res) => {
-    res.type('text/html; charset=utf-8').send(renderHomePage());
+    res
+      .type('text/html; charset=utf-8')
+      .send(renderHomePage(publicBasePath(process.env)));
   });
   router.get('/privacy', csp, (_req, res) => {
     res

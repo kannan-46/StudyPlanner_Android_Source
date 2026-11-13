@@ -3,6 +3,8 @@ import { ObjectId, type Db } from 'mongodb';
 import { AppError } from '../../core/errors/app-error';
 
 const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+// A just-rotated token presented again is a routine retry, not theft.
+const REUSE_GRACE_MS = 60 * 1000;
 
 interface SessionDoc {
   _id: ObjectId;
@@ -77,6 +79,10 @@ export function createSessionsRepository(db: Db): SessionsRepository {
         { returnDocument: 'before' },
       );
       if (claimed) {
+        const user = await db
+          .collection('users')
+          .findOne({ _id: claimed.userId }, { projection: { _id: 1 } });
+        if (!user) throw new AppError('UNAUTHENTICATED');
         const next = await insert(
           newId,
           claimed.userId,
@@ -87,6 +93,10 @@ export function createSessionsRepository(db: Db): SessionsRepository {
       }
       const existing = await sessions.findOne({ tokenHash });
       if (existing && existing.revokedAt !== null) {
+        const withinGrace =
+          existing.replacedBy !== null &&
+          now.getTime() - existing.revokedAt.getTime() < REUSE_GRACE_MS;
+        if (withinGrace) throw new AppError('UNAUTHENTICATED');
         await repo.revokeAllForUser(existing.userId, now);
       }
       throw new AppError('UNAUTHENTICATED');

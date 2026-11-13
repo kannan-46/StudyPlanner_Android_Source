@@ -84,7 +84,7 @@ describe('auth', () => {
     expect(res.body.error.code).toBe('GOOGLE_TOKEN_INVALID');
   });
 
-  it('rotates refresh tokens and detects reuse', async () => {
+  it('rotates refresh tokens and 401s on immediate retry', async () => {
     const { app } = build();
     const auth = await signIn(app);
     const r1 = await request(app)
@@ -102,7 +102,7 @@ describe('auth', () => {
     const after = await request(app)
       .post('/v1/auth/refresh')
       .send({ refreshToken: r1.body.refreshToken });
-    expect(after.status).toBe(401);
+    expect(after.status).toBe(200);
   });
 
   it('logout revokes the session', async () => {
@@ -162,6 +162,49 @@ describe('auth', () => {
     ]);
     expect(results.filter(r => r.status === 200)).toHaveLength(1);
     expect(results.filter(r => r.status === 401)).toHaveLength(1);
+  });
+
+  describe('refresh reuse', () => {
+    let t = new Date('2026-11-13T10:00:00Z').getTime();
+    const setup = async () => {
+      t = new Date('2026-11-13T10:00:00Z').getTime();
+      const { app, deps } = build({ now: () => new Date(t) });
+      const a = await signIn(app);
+      const b = await signIn(app); // second device, same user
+      const rot = await request(app)
+        .post('/v1/auth/refresh')
+        .send({ refreshToken: a.refreshToken });
+      return { app, deps, a, b, rot };
+    };
+    const refresh = (app: Express, refreshToken: string) =>
+      request(app).post('/v1/auth/refresh').send({ refreshToken });
+
+    it('keeps other sessions when a rotated token is retried within 60s', async () => {
+      const { app, a, b, rot } = await setup();
+      t += 59_000;
+      expect((await refresh(app, a.refreshToken)).status).toBe(401);
+      expect((await refresh(app, b.refreshToken)).status).toBe(200);
+      expect((await refresh(app, rot.body.refreshToken)).status).toBe(200);
+    });
+
+    it('revokes every session when reuse happens after 60s', async () => {
+      const { app, a, b, rot } = await setup();
+      t += 61_000;
+      expect((await refresh(app, a.refreshToken)).status).toBe(401);
+      expect((await refresh(app, b.refreshToken)).status).toBe(401);
+      expect((await refresh(app, rot.body.refreshToken)).status).toBe(401);
+    });
+
+    it('rejects refresh when the user no longer exists', async () => {
+      const { app, deps, b } = await setup();
+      const db = await deps.getDb();
+      await db.collection('users').deleteMany({});
+      expect((await refresh(app, b.refreshToken)).status).toBe(401);
+      const doc = await db.collection('sessions').countDocuments({
+        revokedAt: { $ne: null },
+      });
+      expect(doc).toBeGreaterThanOrEqual(2); // a (rotated) and b (revoked)
+    });
   });
 
   it('rate limits auth routes after 20 requests', async () => {

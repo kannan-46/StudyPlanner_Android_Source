@@ -1,6 +1,6 @@
 import { PAGE_STYLES } from './privacy.html';
 
-export function renderHomePage(): string {
+export function renderHomePage(basePath = ''): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -12,7 +12,7 @@ export function renderHomePage(): string {
 <body>
 <h1>Study Planner</h1>
 <p>Study Planner is a spaced-revision planner that schedules when to revisit each topic you study.</p>
-<p><a href="./privacy">Privacy Policy</a></p>
+<p><a href="${basePath}/privacy">Privacy Policy</a></p>
 </body>
 </html>
 `;

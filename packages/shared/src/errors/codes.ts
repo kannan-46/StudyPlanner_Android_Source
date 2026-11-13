@@ -13,6 +13,10 @@ export const ERROR_CODES = {
     status: 409,
     message: 'Revisions must be done in order.',
   },
+  VERSION_CONFLICT: {
+    status: 409,
+    message: 'This item changed on another device. Try again.',
+  },
   LIMIT_EXCEEDED: { status: 422, message: 'You have reached the limit.' },
   BACKUP_INVALID: { status: 400, message: 'This backup file is not valid.' },
   RATE_LIMITED: {
