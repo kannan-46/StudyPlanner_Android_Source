@@ -60,6 +60,15 @@ class ReminderContentTest {
         assertFalse(ReminderContent.shouldShowMissed(now(9, 0), 8, 0, today))
     }
 
+    @Test fun fireShowsWhenNotShownToday() {
+        assertTrue(ReminderContent.shouldShowOnFire(today, today.minusDays(1)))
+        assertTrue(ReminderContent.shouldShowOnFire(today, null))
+    }
+
+    @Test fun fireSkipsWhenAlreadyShownToday() {
+        assertFalse(ReminderContent.shouldShowOnFire(today, today))
+    }
+
     @Test fun missedFalseBeforeFire() {
         assertFalse(ReminderContent.shouldShowMissed(now(7, 0), 8, 0, today.minusDays(1)))
     }

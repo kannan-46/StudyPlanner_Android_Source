@@ -9,7 +9,7 @@ class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val today = LocalDate.now()
         val state = ReminderStore.read(context)
-        if (state.enabled) {
+        if (state.enabled && ReminderContent.shouldShowOnFire(today, state.lastShownDate)) {
             val content = ReminderContent.compose(state.items, today)
             if (content != null && ReminderNotifications.areEnabled(context)) {
                 ReminderNotifications.show(context, content)

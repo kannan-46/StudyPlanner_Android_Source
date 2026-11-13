@@ -105,9 +105,15 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
     }
 
     @ReactMethod
-    fun sendTestNotification(promise: Promise) = run(promise) {
-        ReminderNotifications.show(ctx, ReminderContent.Content("Test reminder", "Daily revision reminders are working."))
-        null
+    fun sendTestNotification(promise: Promise) {
+        if (!ReminderNotifications.areEnabled(ctx)) {
+            promise.reject("E_NOTIFICATIONS_OFF", "Notifications are turned off for this app.")
+            return
+        }
+        run(promise) {
+            ReminderNotifications.show(ctx, ReminderContent.Content("Test reminder", "Daily revision reminders are working."))
+            null
+        }
     }
 
     @ReactMethod

@@ -28,6 +28,9 @@ object ReminderContent {
         return Content(title, body)
     }
 
+    /** At most one summary per local date. */
+    fun shouldShowOnFire(today: LocalDate, lastShownDate: LocalDate?): Boolean = lastShownDate != today
+
     fun shouldShowMissed(now: ZonedDateTime, hour: Int, minute: Int, lastShownDate: LocalDate?): Boolean {
         val today = now.toLocalDate()
         val fire = ZonedDateTime.of(today, LocalTime.of(hour, minute), now.zone)

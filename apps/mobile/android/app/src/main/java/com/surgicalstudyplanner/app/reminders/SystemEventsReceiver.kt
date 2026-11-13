@@ -13,7 +13,9 @@ class SystemEventsReceiver : BroadcastReceiver() {
         ReminderScheduler.arm(context)
         val now = ZonedDateTime.now()
         val state = ReminderStore.read(context)
-        if (state.enabled && ReminderContent.shouldShowMissed(now, state.hour, state.minute, state.lastShownDate)) {
+        val missedEligible = intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
+        // Clock/timezone/permission changes only re-arm; missed catch-up is for reboot and update.
+        if (missedEligible && state.enabled && ReminderContent.shouldShowMissed(now, state.hour, state.minute, state.lastShownDate)) {
             val content = ReminderContent.compose(state.items, now.toLocalDate())
             if (content != null && ReminderNotifications.areEnabled(context)) {
                 ReminderNotifications.show(context, content)

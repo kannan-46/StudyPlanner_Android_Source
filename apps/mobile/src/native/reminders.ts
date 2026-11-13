@@ -62,6 +62,10 @@ export async function openReminderSettings(
   await native()?.openSettings?.(kind);
 }
 
+/**
+ * Shows a test notification. Rejects with code `E_NOTIFICATIONS_OFF` when
+ * notifications are disabled for the app (no silent success).
+ */
 export async function sendTestNotification(): Promise<void> {
   await native()?.sendTestNotification?.();
 }

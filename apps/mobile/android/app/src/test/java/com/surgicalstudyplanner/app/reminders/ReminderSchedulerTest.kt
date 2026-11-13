@@ -27,7 +27,10 @@ class ReminderSchedulerTest {
         val now = ZonedDateTime.of(2026, 3, 8, 0, 30, 0, 0, ny)
         val next = ReminderScheduler.nextFireTime(now, 2, 30)
         assertTrue(next.isAfter(now))
+        // 02:30 does not exist; ZonedDateTime.of shifts forward by the 1h gap -> 03:30 EDT.
+        assertEquals(ZonedDateTime.of(2026, 3, 8, 3, 30, 0, 0, ny), next)
         assertEquals(3, next.hour)
+        assertEquals(30, next.minute)
         assertEquals(8, next.dayOfMonth)
         assertTrue(ny.rules.isValidOffset(next.toLocalDateTime(), next.offset))
     }
