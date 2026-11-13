@@ -131,4 +131,39 @@ describe('me', () => {
     ]);
     expect(x.user.id).toBe(y.user.id);
   });
+
+  it('concurrent PATCHes to different settings keep both', async () => {
+    const { app } = build();
+    const auth = await signIn(app, 'conc');
+    const h = bearer(auth.accessToken);
+    const rs = await Promise.all([
+      request(app)
+        .patch('/v1/me')
+        .set(h)
+        .send({ settings: { theme: 'dark' } }),
+      request(app)
+        .patch('/v1/me')
+        .set(h)
+        .send({ settings: { reminderTime: '21:30' } }),
+    ]);
+    expect(rs.map(r => r.status)).toEqual([200, 200]);
+    const me = await request(app).get('/v1/me').set(h);
+    expect(me.body.settings.theme).toBe('dark');
+    expect(me.body.settings.reminderTime).toBe('21:30');
+  });
+
+  it('concurrent onboarding PATCHes keep a single timestamp', async () => {
+    const { app } = build();
+    clock.t = new Date('2026-11-13T10:00:00Z');
+    const auth = await signIn(app, 'onbconc');
+    const h = bearer(auth.accessToken);
+    const rs = await Promise.all([
+      request(app).patch('/v1/me').set(h).send({ onboardingCompleted: true }),
+      request(app).patch('/v1/me').set(h).send({ onboardingCompleted: true }),
+    ]);
+    expect(rs.map(r => r.status)).toEqual([200, 200]);
+    const ts = rs[0]?.body.onboardingCompletedAt;
+    expect(ts).toBe('2026-11-13T10:00:00.000Z');
+    expect(rs[1]?.body.onboardingCompletedAt).toBe(ts);
+  });
 });

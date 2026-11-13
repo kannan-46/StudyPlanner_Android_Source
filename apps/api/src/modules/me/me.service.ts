@@ -1,5 +1,5 @@
 import type { Db, ObjectId } from 'mongodb';
-import type { Settings, UpdateMeInput, UserView } from '@planner/shared';
+import type { UpdateMeInput, UserView } from '@planner/shared';
 import type { AppDeps } from '../../core/deps';
 import { AppError } from '../../core/errors/app-error';
 import {
@@ -33,22 +33,13 @@ export function createMeService(deps: AppDeps) {
     },
     async update(userId: ObjectId, input: UpdateMeInput): Promise<UserView> {
       const repo = createUsersRepository(await deps.getDb());
-      const user = await repo.findById(userId);
-      if (!user) throw new AppError('UNAUTHENTICATED');
       const patch: UserPatch = {};
       if (input.name !== undefined) patch.name = input.name;
-      if (input.settings) {
-        const defined = Object.fromEntries(
-          Object.entries(input.settings).filter(([, v]) => v !== undefined),
-        );
-        patch.settings = { ...user.settings, ...defined } as Settings;
+      if (input.settings) patch.settings = input.settings;
+      if (input.onboardingCompleted) {
+        await repo.markOnboardingCompleted(userId, deps.now());
       }
-      if (input.onboardingCompleted && !user.onboardingCompletedAt) {
-        patch.onboardingCompletedAt = deps.now();
-      }
-      const updated = Object.keys(patch).length
-        ? await repo.updateMe(userId, patch)
-        : user;
+      const updated = await repo.updateMe(userId, patch);
       if (!updated) throw new AppError('UNAUTHENTICATED');
       return toUserView(updated);
     },

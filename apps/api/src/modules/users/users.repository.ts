@@ -31,14 +31,16 @@ export function toUserView(doc: UserDoc): UserView {
   };
 }
 
-export type UserPatch = Partial<
-  Pick<UserDoc, 'name' | 'settings' | 'onboardingCompletedAt'>
->;
+export interface UserPatch {
+  name?: string;
+  settings?: Partial<Settings>;
+}
 
 export interface UsersRepository {
   upsertFromGoogle(identity: GoogleIdentity, now: Date): Promise<UserDoc>;
   findById(id: ObjectId): Promise<UserDoc | null>;
   updateMe(id: ObjectId, patch: UserPatch): Promise<UserDoc | null>;
+  markOnboardingCompleted(id: ObjectId, at: Date): Promise<void>;
   deleteById(id: ObjectId): Promise<void>;
 }
 
@@ -76,10 +78,22 @@ export function createUsersRepository(db: Db): UsersRepository {
       return users.findOne({ _id: id });
     },
     updateMe(id, patch) {
+      const set: Record<string, unknown> = {};
+      if (patch.name !== undefined) set.name = patch.name;
+      for (const [k, v] of Object.entries(patch.settings ?? {})) {
+        if (v !== undefined) set[`settings.${k}`] = v;
+      }
+      if (Object.keys(set).length === 0) return users.findOne({ _id: id });
       return users.findOneAndUpdate(
         { _id: id },
-        { $set: patch },
+        { $set: set },
         { returnDocument: 'after' },
+      );
+    },
+    async markOnboardingCompleted(id, at) {
+      await users.updateOne(
+        { _id: id, onboardingCompletedAt: null },
+        { $set: { onboardingCompletedAt: at } },
       );
     },
     async deleteById(id) {
