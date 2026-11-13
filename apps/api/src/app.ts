@@ -9,6 +9,8 @@ import { examsRouter } from './modules/exams/exams.routes';
 import { subjectsRouter } from './modules/subjects/subjects.routes';
 import { topicsRouter } from './modules/topics/topics.routes';
 import { healthRouter } from './modules/health/health.routes';
+import { agendaRouter } from './modules/agenda/agenda.routes';
+import { statsRouter } from './modules/stats/stats.routes';
 
 export function createApp(
   deps: AppDeps,
@@ -27,6 +29,8 @@ export function createApp(
   app.use('/v1/exams', examsRouter(deps));
   app.use('/v1/subjects', subjectsRouter(deps));
   app.use('/v1/topics', topicsRouter(deps));
+  app.use('/v1/agenda', agendaRouter(deps));
+  app.use('/v1/stats', statsRouter(deps));
   extraRoutes?.(app);
 
   app.use(notFoundHandler);
