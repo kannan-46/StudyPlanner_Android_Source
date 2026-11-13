@@ -7,6 +7,7 @@ import { authRouter } from './modules/auth/auth.routes';
 import { meRouter } from './modules/me/me.routes';
 import { examsRouter } from './modules/exams/exams.routes';
 import { subjectsRouter } from './modules/subjects/subjects.routes';
+import { topicsRouter } from './modules/topics/topics.routes';
 import { healthRouter } from './modules/health/health.routes';
 
 export function createApp(
@@ -25,6 +26,7 @@ export function createApp(
   app.use('/v1/me', meRouter(deps));
   app.use('/v1/exams', examsRouter(deps));
   app.use('/v1/subjects', subjectsRouter(deps));
+  app.use('/v1/topics', topicsRouter(deps));
   extraRoutes?.(app);
 
   app.use(notFoundHandler);

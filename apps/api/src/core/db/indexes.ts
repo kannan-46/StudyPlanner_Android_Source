@@ -18,9 +18,13 @@ export async function ensureIndexes(db: Db): Promise<void> {
     db.collection('topics').createIndex({ userId: 1, nextDueOn: 1 }),
     db.collection('topics').createIndex({ userId: 1, subjectId: 1 }),
     db.collection('topics').createIndex({ userId: 1, updatedAt: 1 }),
-    db
-      .collection('topics')
-      .createIndex({ userId: 1, legacyId: 1 }, { unique: true, sparse: true }),
+    db.collection('topics').createIndex(
+      { userId: 1, legacyId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { legacyId: { $type: 'string' } },
+      },
+    ),
     db.collection('mockTests').createIndex({ userId: 1, takenOn: -1 }),
   ]);
 }
