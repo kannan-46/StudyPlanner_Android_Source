@@ -1,10 +1,7 @@
-package com.surgicalstudyplanner.app
+package com.surgicalstudyplanner.app.backup
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import android.widget.Toast
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.BaseActivityEventListener
@@ -14,7 +11,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.io.ByteArrayOutputStream
 
-class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
+class BackupFilesModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
     private var exportPromise: Promise? = null
     private var importPromise: Promise? = null
 
@@ -31,7 +28,7 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
         context.addActivityEventListener(activityEventListener)
     }
 
-    override fun getName(): String = "PlannerNative"
+    override fun getName(): String = "BackupFiles"
 
     override fun invalidate() {
         reactApplicationContext.removeActivityEventListener(activityEventListener)
@@ -41,50 +38,6 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
         importPromise = null
         currentExportJson = null
         super.invalidate()
-    }
-
-    @ReactMethod
-    fun cancelAllRevisionAlarms(promise: Promise) = runWithPromise(promise) {
-        AlarmStore.cancelAllRevisions(reactApplicationContext)
-        null
-    }
-
-    @ReactMethod
-    fun clearAllAlarms(promise: Promise) = runWithPromise(promise) {
-        AlarmStore.clearAllAlarms(reactApplicationContext)
-        null
-    }
-
-    @ReactMethod
-    fun scheduleRevisionAlarm(id: String, atMillis: Double, title: String, body: String, promise: Promise) =
-        runWithPromise(promise) {
-            require(id.isNotBlank()) { "Alarm ID must not be empty." }
-            AlarmStore.scheduleRevision(reactApplicationContext, id, atMillis.toLong(), title, body)
-            null
-        }
-
-    @ReactMethod
-    fun scheduleDailyReminder(hour: Int, minute: Int, pendingCount: Int, promise: Promise) = runWithPromise(promise) {
-        require(hour in 0..23 && minute in 0..59 && pendingCount >= 0) { "Daily reminder settings are invalid." }
-        AlarmStore.scheduleDaily(reactApplicationContext, hour, minute, pendingCount)
-        null
-    }
-
-    @ReactMethod
-    fun requestExactAlarmAccess(promise: Promise) = runWithPromise(promise) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AlarmStore.canExact(reactApplicationContext)) {
-            val activity = reactApplicationContext.currentActivity ?: throw IllegalStateException("The app is not in the foreground.")
-            val intent = Intent(
-                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                Uri.parse("package:${reactApplicationContext.packageName}"),
-            )
-            activity.startActivity(intent)
-        } else {
-            reactApplicationContext.currentActivity?.let {
-                Toast.makeText(it, "Exact alarm access is already available", Toast.LENGTH_SHORT).show()
-            }
-        }
-        null
     }
 
     @ReactMethod
@@ -195,14 +148,6 @@ class PlannerNativeModule(context: ReactApplicationContext) : ReactContextBaseJa
     }
 
     private var currentExportJson: String? = null
-
-    private fun runWithPromise(promise: Promise, action: () -> Any?) {
-        try {
-            promise.resolve(action())
-        } catch (error: Exception) {
-            promise.reject("E_NATIVE_OPERATION", error.message ?: "Native operation failed.", error)
-        }
-    }
 
     private companion object {
         const val REQUEST_EXPORT = 4101

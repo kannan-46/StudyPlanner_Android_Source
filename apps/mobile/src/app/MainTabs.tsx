@@ -7,6 +7,7 @@ import { ScheduleScreen } from '../features/schedule/ScheduleScreen';
 import { TopicsScreen } from '../features/topics/TopicsScreen';
 import { ProgressScreen } from '../features/progress/ProgressScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
+import { useReminderSnapshotSync } from '../features/agenda/useReminderSnapshotSync';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -23,6 +24,7 @@ const glyph = (color: string) => (
 );
 
 export function MainTabs() {
+  useReminderSnapshotSync();
   const { colors } = useTheme();
   return (
     <Tab.Navigator

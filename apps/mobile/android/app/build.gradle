@@ -83,6 +83,10 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.surgicalstudyplanner.app"
+    compileOptions {
+        // java.time on minSdk 24 (reminder scheduling)
+        coreLibraryDesugaringEnabled true
+    }
     defaultConfig {
         buildConfigField "String", "API_BASE_URL", "\"${configuredApiBaseUrl}\""
         buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${configuredGoogleWebClientId}\""
@@ -121,6 +125,9 @@ dependencies {
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    testImplementation("junit:junit:4.13.2")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

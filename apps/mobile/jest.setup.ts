@@ -17,8 +17,15 @@ NativeModules.AppConfig = {
 };
 NativeModules.GoogleAuth = { signIn: jest.fn(), signOut: jest.fn() };
 NativeModules.Reminders = {
-  schedule: jest.fn(),
-  cancel: jest.fn(),
-  getStatus: jest.fn(),
+  syncSnapshot: jest.fn().mockResolvedValue(undefined),
+  configure: jest.fn().mockResolvedValue(undefined),
+  getStatus: jest.fn().mockResolvedValue(null),
+  requestNotificationPermission: jest.fn().mockResolvedValue(true),
+  openSettings: jest.fn().mockResolvedValue(undefined),
+  sendTestNotification: jest.fn().mockResolvedValue(undefined),
+  clearAll: jest.fn().mockResolvedValue(undefined),
 };
-NativeModules.BackupFiles = { save: jest.fn(), pick: jest.fn() };
+NativeModules.BackupFiles = {
+  exportBackup: jest.fn().mockResolvedValue(undefined),
+  importBackup: jest.fn(),
+};
