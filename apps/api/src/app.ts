@@ -11,6 +11,7 @@ import { topicsRouter } from './modules/topics/topics.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { agendaRouter } from './modules/agenda/agenda.routes';
 import { statsRouter } from './modules/stats/stats.routes';
+import { mockTestsRouter } from './modules/mockTests/mockTests.routes';
 
 export function createApp(
   deps: AppDeps,
@@ -31,6 +32,7 @@ export function createApp(
   app.use('/v1/topics', topicsRouter(deps));
   app.use('/v1/agenda', agendaRouter(deps));
   app.use('/v1/stats', statsRouter(deps));
+  app.use('/v1/mock-tests', mockTestsRouter(deps));
   extraRoutes?.(app);
 
   app.use(notFoundHandler);
