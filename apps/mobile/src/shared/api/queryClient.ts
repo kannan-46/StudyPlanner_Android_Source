@@ -9,7 +9,7 @@ export const queryKeys = {
   subjects: ['subjects'] as const,
   topics: (q?: TopicListQuery) => ['topics', q ?? {}] as const,
   topic: (id: string) => ['topic', id] as const,
-  agenda: (today: string) => ['agenda', today] as const,
+  agenda: (today: string, days: number) => ['agenda', today, days] as const,
   stats: (today: string) => ['stats', today] as const,
   mockTests: ['mockTests'] as const,
 };

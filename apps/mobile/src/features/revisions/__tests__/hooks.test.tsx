@@ -38,9 +38,23 @@ const agendaItem: AgendaItem = {
 };
 
 const clients: QueryClient[] = [];
-afterEach(() => {
-  clients.splice(0).forEach(c => c.clear());
+const cleanups: (() => void)[] = [];
+afterEach(async () => {
+  cleanups.splice(0).forEach(fn => fn());
+  for (const c of clients.splice(0)) {
+    await c.cancelQueries();
+    c.getMutationCache().clear();
+    c.clear();
+  }
 });
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>(r => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
 
 function setup(post: jest.Mock) {
   const http = {
@@ -50,10 +64,15 @@ function setup(post: jest.Mock) {
     del: jest.fn(),
   } as Http;
   const qc = createQueryClient();
+  qc.setDefaultOptions({
+    queries: { retry: false },
+    mutations: { gcTime: 0, retry: false },
+  });
   clients.push(qc);
   const today = '2026-11-13';
   qc.setQueryData(queryKeys.topic('t1'), topic);
-  qc.setQueryData(queryKeys.agenda(today), [agendaItem]);
+  qc.setQueryData(queryKeys.agenda(today, 30), [agendaItem]);
+  qc.setQueryData(queryKeys.agenda(today, 60), [agendaItem]);
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={qc}>
       <ApiProvider http={http}>{children}</ApiProvider>
@@ -64,11 +83,13 @@ function setup(post: jest.Mock) {
 
 describe('useCompleteRevision', () => {
   it('shows R1 done immediately and removes the agenda item', async () => {
-    const post = jest.fn(() => new Promise(() => {}));
+    const gate = deferred<unknown>();
+    const post = jest.fn(() => gate.promise);
     const { qc, today, wrapper } = setup(post);
-    const { result } = await renderHook(() => useCompleteRevision(), {
+    const { result, unmount } = await renderHook(() => useCompleteRevision(), {
       wrapper,
     });
+    cleanups.push(unmount, () => gate.resolve({}));
     await act(async () => {
       result.current.mutate({
         topicId: 't1',
@@ -80,15 +101,20 @@ describe('useCompleteRevision', () => {
       const t = qc.getQueryData<TopicView>(queryKeys.topic('t1'));
       expect(t?.revisions[0]?.doneOn).toBe('2026-11-13');
     });
-    expect(qc.getQueryData<AgendaItem[]>(queryKeys.agenda(today))).toEqual([]);
+    for (const days of [30, 60]) {
+      expect(
+        qc.getQueryData<AgendaItem[]>(queryKeys.agenda(today, days)),
+      ).toEqual([]);
+    }
   });
 
   it('rolls back and surfaces the error when the API rejects', async () => {
     const post = jest.fn().mockRejectedValue(new ApiError('INTERNAL', 500));
     const { qc, today, wrapper } = setup(post);
-    const { result } = await renderHook(() => useCompleteRevision(), {
+    const { result, unmount } = await renderHook(() => useCompleteRevision(), {
       wrapper,
     });
+    cleanups.push(unmount);
     await act(async () => {
       await expect(
         result.current.mutateAsync({
@@ -99,8 +125,10 @@ describe('useCompleteRevision', () => {
       ).rejects.toBeInstanceOf(ApiError);
     });
     expect(qc.getQueryData(queryKeys.topic('t1'))).toEqual(topic);
-    expect(qc.getQueryData<AgendaItem[]>(queryKeys.agenda(today))).toEqual([
-      agendaItem,
-    ]);
+    for (const days of [30, 60]) {
+      expect(
+        qc.getQueryData<AgendaItem[]>(queryKeys.agenda(today, days)),
+      ).toEqual([agendaItem]);
+    }
   });
 });

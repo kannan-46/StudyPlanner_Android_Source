@@ -7,7 +7,7 @@ export function useAgenda(days = 30) {
   const { agenda } = useApi();
   const today = localToday();
   return useQuery({
-    queryKey: queryKeys.agenda(today),
+    queryKey: queryKeys.agenda(today, days),
     queryFn: () => agenda.get(today, days),
   });
 }
