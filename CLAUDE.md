@@ -50,6 +50,10 @@ Express + MongoDB API deployed on Vercel.
   npm (the script passes `--experimental-vm-modules`, which mongodb needs under
   Jest).
 - `npm run dev -w @planner/api`, `npm run smoke -w @planner/api`
+- Before deploying the API run `npm run check:cjs -w @planner/api`: it compiles
+  to CommonJS and loads the entry with require(esm) disabled (as Vercel does).
+  Dependencies must ship CJS (jose is pinned to 5.x for this reason; v6 is
+  ESM-only). Vercel runs Node 22.x.
 
 ## Mobile (apps/mobile)
 
