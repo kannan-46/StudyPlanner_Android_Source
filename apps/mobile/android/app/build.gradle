@@ -57,9 +57,19 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
+// Release signing comes from USER-level Gradle properties
+// (~/.gradle/gradle.properties), never from the repo.
+def releaseSigningKeys = [
+    "STUDYPLANNER_UPLOAD_STORE_FILE",
+    "STUDYPLANNER_UPLOAD_STORE_PASSWORD",
+    "STUDYPLANNER_UPLOAD_KEY_ALIAS",
+    "STUDYPLANNER_UPLOAD_KEY_PASSWORD",
+]
+def releaseSigningConfigured = releaseSigningKeys.every { project.hasProperty(it) }
+def releaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
 def configuredApiBaseUrl = project.findProperty("API_BASE_URL") ?: "https://studyplannerandroidsource-server.vercel.app/api/server"
-def configuredGoogleWebClientId = project.findProperty("GOOGLE_WEB_CLIENT_ID") ?: ""
+def configuredGoogleWebClientId = project.findProperty("GOOGLE_WEB_CLIENT_ID") ?: "1056733793312-efvaroanaoliggbn4o108o06cmopgskc.apps.googleusercontent.com"
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -93,10 +103,27 @@ android {
         applicationId "com.surgicalstudyplanner.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "3.0.0"
+        versionCode 4
+        versionName "4.0.0"
+    }
+    splits {
+        abi {
+            // Per-ABI APKs for release only; debug keeps all ABIs.
+            enable releaseRequested
+            reset()
+            include "arm64-v8a", "armeabi-v7a"
+            universalApk false
+        }
     }
     signingConfigs {
+        if (releaseSigningConfigured) {
+            release {
+                storeFile file(project.property("STUDYPLANNER_UPLOAD_STORE_FILE"))
+                storePassword project.property("STUDYPLANNER_UPLOAD_STORE_PASSWORD")
+                keyAlias project.property("STUDYPLANNER_UPLOAD_KEY_ALIAS")
+                keyPassword project.property("STUDYPLANNER_UPLOAD_KEY_PASSWORD")
+            }
+        }
         debug {
             storeFile file('debug.keystore')
             storePassword 'android'
@@ -109,13 +136,19 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Never falls back to the debug keystore (see check below).
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
+}
+
+if (releaseRequested && !releaseSigningConfigured) {
+    throw new GradleException("Release signing not configured: see apps/mobile/README.md#release")
 }
 
 dependencies {

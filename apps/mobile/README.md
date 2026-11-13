@@ -25,8 +25,8 @@ Two values are baked into `BuildConfig`, set either in
 
 - `API_BASE_URL` - defaults to the Vercel deployment
   `https://studyplannerandroidsource-server.vercel.app/api/server`.
-- `GOOGLE_WEB_CLIENT_ID` - the Google OAuth **Web** client ID (empty by
-  default; Google sign-in does not work until it is set).
+- `GOOGLE_WEB_CLIENT_ID` - the Google OAuth **Web** client ID (public; defaults
+  to the project's client ID, override with `-P`).
 
 ```sh
 ./gradlew assembleDebug -PGOOGLE_WEB_CLIENT_ID=xxxx.apps.googleusercontent.com
@@ -40,12 +40,58 @@ keytool -list -v -keystore android/app/debug.keystore \
 ```
 Note: `android/app/debug.keystore` is the standard, public React Native debug
 key (well-known passwords), not a release key. It must never be used to sign a
-release build; the release keystore is created in Plan 3.
+release build; see [Release build](#release).
 
 
 Register the SHA-1 and package `com.surgicalstudyplanner.app` as an Android
-OAuth client in Google Cloud. A release keystore (and its SHA-1) comes in
-Plan 3.
+OAuth client in Google Cloud. The release key is covered in [Release build](#release).
+
+## Release build
+
+<a id="release"></a>
+
+Release APKs are signed with an upload key that lives **outside the repo**.
+Release builds never fall back to the debug keystore: without the signing
+properties, `assembleRelease` fails with "Release signing not configured: see
+apps/mobile/README.md#release".
+
+1. Generate the key once (PowerShell or cmd), and keep it outside the repo
+   with at least one backup (losing it means you cannot update the app):
+
+   ```
+   keytool -genkeypair -v -storetype PKCS12 -keystore D:keysstudyplanner-upload.jks -alias studyplanner -keyalg RSA -keysize 2048 -validity 10000
+   ```
+
+2. Put these four properties in the USER-level Gradle file
+   `C:/Users/<user>/.gradle/gradle.properties` (never in the repo):
+
+   ```
+   STUDYPLANNER_UPLOAD_STORE_FILE=D:/keys/studyplanner-upload.jks
+   STUDYPLANNER_UPLOAD_STORE_PASSWORD=<store password>
+   STUDYPLANNER_UPLOAD_KEY_ALIAS=studyplanner
+   STUDYPLANNER_UPLOAD_KEY_PASSWORD=<key password>
+   ```
+
+3. Get the SHA-1 and add it as an **Android** OAuth client in Google Cloud
+   (package `com.surgicalstudyplanner.app`), alongside the debug one:
+
+   ```
+   keytool -list -v -keystore D:keysstudyplanner-upload.jks -alias studyplanner
+   ```
+
+4. Build (JDK 17 and `ANDROID_HOME` exported):
+
+   ```sh
+   cd apps/mobile/android
+   ./gradlew assembleRelease
+   ```
+
+   Output (one APK per ABI, no universal APK):
+   - `android/app/build/outputs/apk/release/app-arm64-v8a-release.apk`
+   - `android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk`
+
+   Install arm64-v8a on almost all modern phones (armeabi-v7a is for old
+   32-bit devices). Debug builds keep all ABIs.
 
 ## Tests
 
