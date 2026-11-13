@@ -1,5 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, Text } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Banner } from '../shared/ui/Banner';
+import { useOnline } from '../shared/lib/useOnline';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { useAuth } from '../features/auth/AuthProvider';
@@ -13,6 +16,8 @@ import { MockTestFormScreen } from '../features/mocktests/MockTestFormScreen';
 import { Screen } from '../shared/ui/Screen';
 import { useTheme } from '../shared/ui/ThemeProvider';
 import { MainTabs, type MainTabParamList } from './MainTabs';
+
+export const OFFLINE_TEXT = "No connection — changes can't be saved right now";
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
@@ -53,7 +58,7 @@ function Splash() {
   );
 }
 
-export function RootNavigator() {
+function RootScreens() {
   const { state } = useAuth();
   if (state.status === 'loading') return <Splash />;
   if (state.status === 'signedOut') return <SignInScreen />;
@@ -74,3 +79,29 @@ export function RootNavigator() {
     </Stack.Navigator>
   );
 }
+
+export function RootNavigator() {
+  const online = useOnline();
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={styles.flex}>
+      {online ? null : (
+        <View
+          style={{
+            backgroundColor: colors.background,
+            paddingTop: insets.top,
+            paddingHorizontal: spacing.sm,
+          }}
+        >
+          <Banner tone="warning" text={OFFLINE_TEXT} />
+        </View>
+      )}
+      <View style={styles.flex}>
+        <RootScreens />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({ flex: { flex: 1 } });

@@ -2,7 +2,7 @@ import React from 'react';
 import { useWindowDimensions } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getStateFromPath } from '@react-navigation/native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { UserView } from '@planner/shared';
@@ -11,8 +11,8 @@ import { ApiProvider } from '../../shared/api/ApiProvider';
 import type { Http } from '../../shared/api/http';
 import { ThemeProvider } from '../../shared/ui/ThemeProvider';
 import { useAuth } from '../../features/auth/AuthProvider';
-import { RootNavigator } from '../RootNavigator';
-import { MainTabs, OFFLINE_TEXT } from '../MainTabs';
+import { RootNavigator, OFFLINE_TEXT } from '../RootNavigator';
+import { MainTabs } from '../MainTabs';
 import { linking } from '../linking';
 
 jest.mock('../../features/auth/AuthProvider', () => ({
@@ -120,6 +120,16 @@ it('shows the tabs for a completed user', async () => {
   expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
 });
 
+it('shows the offline banner on sign-in too', async () => {
+  setState({ status: 'signedOut' });
+  mockedNetInfo.mockImplementation((cb: (s: unknown) => void) => {
+    cb({ isConnected: false, isInternetReachable: false });
+    return jest.fn();
+  });
+  await setup();
+  expect(screen.getByText(OFFLINE_TEXT)).toBeTruthy();
+});
+
 it('shows the offline banner when offline, at 320 dp', async () => {
   mockDims(320);
   mockedNetInfo.mockImplementation((cb: (s: unknown) => void) => {
@@ -127,8 +137,7 @@ it('shows the offline banner when offline, at 320 dp', async () => {
     return jest.fn();
   });
   await setup();
-  expect(screen.getByText("No connection — changes can't be saved right now"))
-    .toBeTruthy();
+  expect(screen.getByText(OFFLINE_TEXT)).toBeTruthy();
 });
 
 it('renders MainTabs at 900 dp', async () => {
@@ -140,6 +149,9 @@ it('renders MainTabs at 900 dp', async () => {
 
 it('maps studyplanner://schedule to the Schedule tab', () => {
   expect(linking.prefixes).toContain('studyplanner://');
+  const state = getStateFromPath('schedule', linking.config as never);
+  expect(state?.routes[0].name).toBe('MainTabs');
+  expect(state?.routes[0].state?.routes[0].name).toBe('Schedule');
   expect(linking.config?.screens).toMatchObject({
     MainTabs: { screens: { Schedule: 'schedule' } },
   });
