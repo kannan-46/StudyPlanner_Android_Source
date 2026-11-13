@@ -50,3 +50,20 @@ Express + MongoDB API deployed on Vercel.
   npm (the script passes `--experimental-vm-modules`, which mongodb needs under
   Jest).
 - `npm run dev -w @planner/api`, `npm run smoke -w @planner/api`
+
+## Mobile (apps/mobile)
+
+- Commands: `npm test --prefix apps/mobile [-- <pattern>]`,
+  `npm run typecheck --prefix apps/mobile`, `npm run lint --prefix apps/mobile`.
+  Gradle (from `apps/mobile/android`, JDK 17 + `ANDROID_HOME` exported):
+  `./gradlew testDebugUnitTest assembleDebug`, then `./gradlew --stop`.
+- Native modules (Kotlin, `PlannerPackage`): GoogleAuth, Reminders,
+  BackupFiles, AppConfig. Mocked in `jest.setup.ts`.
+- Build config: `API_BASE_URL` (defaults to the Vercel URL) and
+  `GOOGLE_WEB_CLIENT_ID` via `-P` or `android/gradle.properties`.
+- Never use `toISOString()` for dates (it converts to UTC and can shift the
+  day); build `LocalDate` strings from local date parts or shared helpers.
+- Responsive rule: layouts use the helpers in `src/shared/ui/responsive.tsx`,
+  no fixed widths; they must hold on small phones and large font scales.
+- RNTL v14: `render` and `fireEvent` are async, always `await` them.
+- Test helpers live in `src/test/testUtils.tsx`.
