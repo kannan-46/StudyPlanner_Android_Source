@@ -178,4 +178,122 @@ describe('http client', () => {
     );
     expect(userMessage(new ApiError('NOT_FOUND', 404))).toBe('Not found.');
   });
+
+  it('starts a new refresh for a later expiry after a successful one', async () => {
+    const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r0' });
+    let refreshCalls = 0;
+    const fetchImpl = jest.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith('/v1/auth/refresh')) {
+        refreshCalls++;
+        return res(200, {
+          accessToken: `t${refreshCalls}`,
+          refreshToken: `r${refreshCalls}`,
+        });
+      }
+      const auth = (init.headers as Record<string, string>).Authorization;
+      // Only the newest access token is valid.
+      return auth === `Bearer t${refreshCalls}`
+        ? res(200, { ok: true })
+        : err(401, 'TOKEN_EXPIRED');
+    });
+    const http = createHttp({
+      baseUrl: base,
+      tokens,
+      onSessionEnded: jest.fn(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await http.get('/v1/a');
+    expect(refreshCalls).toBe(1);
+    // t1 expires: server now only accepts a token that does not exist yet.
+    fetchImpl.mockImplementation(async (url: string, init: RequestInit) => {
+      if (url.endsWith('/v1/auth/refresh')) {
+        refreshCalls++;
+        return res(200, { accessToken: 't2', refreshToken: 'r2' });
+      }
+      const auth = (init.headers as Record<string, string>).Authorization;
+      return auth === 'Bearer t2' ? res(200, { ok: true }) : err(401, 'TOKEN_EXPIRED');
+    });
+    await http.get('/v1/b');
+    expect(refreshCalls).toBe(2);
+  });
+
+  it('keeps the session when the refresh fails with a network error or 5xx', async () => {
+    for (const failure of ['network', '503'] as const) {
+      const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
+      const onSessionEnded = jest.fn();
+      const fetchImpl = jest.fn(async (url: string) => {
+        if (url.endsWith('/v1/auth/refresh')) {
+          if (failure === 'network') throw new TypeError('offline');
+          return err(503, 'SERVICE_UNAVAILABLE');
+        }
+        return err(401, 'TOKEN_EXPIRED');
+      });
+      const http = createHttp({
+        baseUrl: base,
+        tokens,
+        onSessionEnded,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+      await expect(http.get('/v1/a')).rejects.toBeInstanceOf(ApiError);
+      expect(onSessionEnded).not.toHaveBeenCalled();
+      expect(tokens.clear).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps the session when storing refreshed tokens fails', async () => {
+    const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
+    tokens.set.mockRejectedValue(new Error('keychain'));
+    const onSessionEnded = jest.fn();
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('/v1/auth/refresh')
+        ? res(200, { accessToken: 'n', refreshToken: 'r2' })
+        : err(401, 'TOKEN_EXPIRED'),
+    );
+    const http = createHttp({
+      baseUrl: base,
+      tokens,
+      onSessionEnded,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await expect(http.get('/v1/a')).rejects.toBeInstanceOf(ApiError);
+    expect(onSessionEnded).not.toHaveBeenCalled();
+    expect(tokens.clear).not.toHaveBeenCalled();
+  });
+
+  it('ends the session only once when a 401 arrives after a failed refresh', async () => {
+    const tokens = makeTokens({ accessToken: 'old', refreshToken: 'r1' });
+    const onSessionEnded = jest.fn();
+    let releaseB!: (r: Response) => void;
+    let bStarted!: () => void;
+    const started = new Promise<void>(r => {
+      bStarted = r;
+    });
+    let sends = 0;
+    const fetchImpl = jest.fn(async (url: string) => {
+      if (url.endsWith('/v1/auth/refresh')) return err(401, 'UNAUTHENTICATED');
+      sends++;
+      if (sends === 1) return err(401, 'TOKEN_EXPIRED'); // request A
+      bStarted();
+      return new Promise<Response>(r => {
+        releaseB = r; // request B held until A's refresh has failed
+      });
+    });
+    const http = createHttp({
+      baseUrl: base,
+      tokens,
+      onSessionEnded,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const a = http.get('/v1/a');
+    const b = http.get('/v1/b');
+    await started;
+    await expect(a).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    releaseB(err(401, 'TOKEN_EXPIRED'));
+    await expect(b).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    expect(
+      fetchImpl.mock.calls.filter(c => String(c[0]).endsWith('/refresh')),
+    ).toHaveLength(1);
+  });
 });

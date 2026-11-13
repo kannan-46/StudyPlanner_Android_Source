@@ -83,10 +83,15 @@ export function createHttp(opts: {
           });
           if (!res.ok) throw await parseError(res);
           const next = await parseOk<Tokens>(res);
-          await tokens.set({
-            accessToken: next.accessToken,
-            refreshToken: next.refreshToken,
-          });
+          try {
+            await tokens.set({
+              accessToken: next.accessToken,
+              refreshToken: next.refreshToken,
+            });
+          } catch {
+            // Storage failure is not an auth failure: keep the session.
+            throw new ApiError('INTERNAL', 500);
+          }
           return next;
         } catch (e) {
           // Transient failures (offline, server trouble) keep the session.
@@ -119,8 +124,10 @@ export function createHttp(opts: {
         if (!used) throw err;
         // If another request already rotated the tokens, just retry with them.
         const latest = await tokens.get();
+        // Tokens already cleared by a failed refresh: the session has ended.
+        if (!latest) throw new ApiError('UNAUTHENTICATED', 401);
         let access: string | undefined;
-        if (latest && latest.accessToken !== used.accessToken) {
+        if (latest.accessToken !== used.accessToken) {
           access = latest.accessToken;
         } else {
           access = (await refreshOnce()).accessToken;
