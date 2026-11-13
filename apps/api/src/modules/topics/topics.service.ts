@@ -119,7 +119,13 @@ export function createTopicsService(deps: AppDeps) {
         if (patch.examIds !== undefined) {
           next.examIds = toObjectIds(patch.examIds);
         }
-        if (patch.studiedOn !== undefined || patch.intervals !== undefined) {
+        const datesChanged =
+          (patch.studiedOn !== undefined &&
+            patch.studiedOn !== current.studiedOn) ||
+          (patch.intervals !== undefined &&
+            (patch.intervals.length !== current.intervals.length ||
+              patch.intervals.some((n, i) => n !== current.intervals[i])));
+        if (datesChanged) {
           const studiedOn = patch.studiedOn ?? current.studiedOn;
           const intervals = patch.intervals ?? current.intervals;
           const earliest = current.revisions

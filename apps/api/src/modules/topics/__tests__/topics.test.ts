@@ -255,6 +255,37 @@ describe('topics', () => {
     expect(ok.status).toBe(200);
   });
 
+  it('keeps snoozes when studiedOn and intervals are unchanged', async () => {
+    const { app, deps, h, subjectId } = await setup('tp-snooze');
+    const t = await request(app)
+      .post('/v1/topics')
+      .set(h)
+      .send({ name: 'Z', subjectId, studiedOn: '2026-11-13' });
+    const db = await deps.getDb();
+    await db.collection('topics').updateOne(
+      { _id: new ObjectId(t.body.id) },
+      {
+        $set: {
+          'revisions.0.dueOverride': '2026-11-25',
+          'revisions.0.dueOn': '2026-11-25',
+          nextDueOn: '2026-11-25',
+        },
+      },
+    );
+    const res = await request(app)
+      .patch(`/v1/topics/${t.body.id}`)
+      .set(h)
+      .send({
+        notes: 'n',
+        studiedOn: '2026-11-13',
+        intervals: [4, 7, 15, 30, 60, 90],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.notes).toBe('n');
+    expect(res.body.revisions[0].dueOverride).toBe('2026-11-25');
+    expect(res.body.revisions[0].dueOn).toBe('2026-11-25');
+  });
+
   it('deletes a topic', async () => {
     const { app, h, subjectId } = await setup('tp-del');
     const t = await request(app)
