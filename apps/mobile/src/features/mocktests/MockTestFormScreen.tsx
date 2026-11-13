@@ -1,7 +1,20 @@
 import React from 'react';
-import { PlaceholderScreen } from '../../shared/ui/Placeholder';
+import { useNavigation } from '@react-navigation/native';
+import { Screen } from '../../shared/ui/Screen';
+import { useSnackbar } from '../../shared/ui/Snackbar';
+import { MockTestForm } from '../progress/MockTestForm';
 
-// Placeholder until its task lands.
 export function MockTestFormScreen() {
-  return <PlaceholderScreen title="Mock test" />;
+  const navigation = useNavigation();
+  const snackbar = useSnackbar();
+  return (
+    <Screen scroll>
+      <MockTestForm
+        onSaved={() => {
+          snackbar.show({ message: 'Mock test added' });
+          navigation.goBack();
+        }}
+      />
+    </Screen>
+  );
 }

@@ -18,11 +18,7 @@ import { AgendaRow } from '../agenda/AgendaRow';
 import { useAgenda } from '../agenda/hooks';
 import { useExams } from '../exams/hooks';
 import { useMe } from '../me/hooks';
-
-/** Task 11 replaces this with the Pomodoro timer card. */
-export function TimerCardSlot() {
-  return null;
-}
+import { PomodoroTimer } from './PomodoroTimer';
 
 function countdownText(name: string, days: number): string {
   if (days === 0) return `${name} is today`;
@@ -179,14 +175,14 @@ export function HomeScreen() {
             </View>
             <View style={{ flex: 1, gap: spacing.md }}>
               {comingUpCard}
-              <TimerCardSlot />
+              <PomodoroTimer />
             </View>
           </View>
         ) : (
           <>
             {todayCard}
             {comingUpCard}
-            <TimerCardSlot />
+            <PomodoroTimer />
             {add}
           </>
         )}
