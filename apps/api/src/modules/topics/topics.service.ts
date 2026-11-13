@@ -1,6 +1,9 @@
 import { ObjectId } from 'mongodb';
 import {
   compareDates,
+  completeRevision,
+  snoozeRevision,
+  undoRevision,
   createSchedule,
   reconcileSchedule,
   type TopicCreateInput,
@@ -47,8 +50,53 @@ export function createTopicsService(deps: AppDeps) {
     throw new AppError('REVISION_OUT_OF_ORDER');
   }
 
+  const scheduleOf = (d: TopicDoc) => ({
+    studiedOn: d.studiedOn,
+    intervals: d.intervals,
+    revisions: d.revisions,
+  });
+
   return {
     mutateWithRetry,
+
+    async completeRevision(
+      userId: ObjectId,
+      id: string,
+      revisionId: string,
+      doneOn: string,
+    ): Promise<TopicView> {
+      return toTopicView(
+        await mutateWithRetry(userId, id, d =>
+          completeRevision(scheduleOf(d), revisionId, doneOn),
+        ),
+      );
+    },
+
+    async undoRevision(
+      userId: ObjectId,
+      id: string,
+      revisionId: string,
+    ): Promise<TopicView> {
+      return toTopicView(
+        await mutateWithRetry(userId, id, d =>
+          undoRevision(scheduleOf(d), revisionId),
+        ),
+      );
+    },
+
+    async snoozeRevision(
+      userId: ObjectId,
+      id: string,
+      revisionId: string,
+      today: string,
+      days: number,
+    ): Promise<TopicView> {
+      return toTopicView(
+        await mutateWithRetry(userId, id, d =>
+          snoozeRevision(scheduleOf(d), revisionId, today, days),
+        ),
+      );
+    },
 
     async list(userId: ObjectId, query: TopicListQuery): Promise<TopicView[]> {
       const { repo } = await ctx();
