@@ -124,6 +124,18 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
         null
     }
 
+    @ReactMethod
+    fun scheduleOneShot(id: String, atMillis: Double, title: String, body: String, promise: Promise) = run(promise) {
+        OneShotScheduler.schedule(ctx, OneShotPlan.plan(id, atMillis.toLong(), title, body, System.currentTimeMillis()))
+        null
+    }
+
+    @ReactMethod
+    fun cancelOneShot(id: String, promise: Promise) = run(promise) {
+        OneShotScheduler.cancel(ctx, OneShotPlan.validateId(id))
+        null
+    }
+
     private fun appDetails(pkg: String) =
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
 

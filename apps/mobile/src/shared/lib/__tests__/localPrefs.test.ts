@@ -2,8 +2,10 @@ import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   clearOnboardingStep,
+  loadFocusTimer,
   loadOnboardingStep,
   loadThemePrefs,
+  saveFocusTimer,
   saveOnboardingStep,
   saveSyncedTheme,
   saveThemeMode,
@@ -97,5 +99,50 @@ describe('onboarding step', () => {
     await saveOnboardingStep('u1', 4);
     await clearOnboardingStep();
     expect(await loadOnboardingStep('u1')).toBe(1);
+  });
+});
+
+describe('focus timer', () => {
+  it('has nothing saved on a fresh install', async () => {
+    expect(await loadFocusTimer()).toBeNull();
+  });
+
+  it('round-trips a running and a paused session', async () => {
+    const running = {
+      status: 'running' as const,
+      endsAt: 1_700_000_000_000,
+      remainingMs: 60_000,
+    };
+    await saveFocusTimer(running);
+    expect(await loadFocusTimer()).toEqual(running);
+    const paused = {
+      status: 'paused' as const,
+      endsAt: null,
+      remainingMs: 90_000,
+    };
+    await saveFocusTimer(paused);
+    expect(await loadFocusTimer()).toEqual(paused);
+  });
+
+  it('saving null clears it', async () => {
+    await saveFocusTimer({ status: 'paused', endsAt: null, remainingMs: 5 });
+    await saveFocusTimer(null);
+    expect(await loadFocusTimer()).toBeNull();
+    expect(await AsyncStorage.getItem('prefs.focusTimer')).toBeNull();
+  });
+
+  it('ignores broken saved values', async () => {
+    await AsyncStorage.setItem('prefs.focusTimer', '{oops');
+    expect(await loadFocusTimer()).toBeNull();
+    await AsyncStorage.setItem(
+      'prefs.focusTimer',
+      JSON.stringify({ status: 'running', endsAt: null, remainingMs: 5 }),
+    );
+    expect(await loadFocusTimer()).toBeNull();
+    await AsyncStorage.setItem(
+      'prefs.focusTimer',
+      JSON.stringify({ status: 'idle', endsAt: null, remainingMs: 5 }),
+    );
+    expect(await loadFocusTimer()).toBeNull();
   });
 });

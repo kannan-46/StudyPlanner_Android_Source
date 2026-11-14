@@ -249,30 +249,25 @@ export function HomeScreen() {
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
       >
         {top}
-        {twoColumns ? (
-          <View
-            testID="home-columns"
-            style={{ flexDirection: 'row', gap: spacing.md }}
-          >
-            <View style={{ flex: 1, gap: spacing.md }}>
-              {add}
-              {overdueCard}
-              {todayCard}
-            </View>
-            <View style={{ flex: 1, gap: spacing.md }}>
-              {comingUpCard}
-              <PomodoroTimer />
-            </View>
-          </View>
-        ) : (
-          <>
+        {/* One tree for both layouts: switching (e.g. on rotation) must not
+            remount the focus timer and lose a running session. */}
+        <View
+          testID={twoColumns ? 'home-columns' : undefined}
+          style={{
+            flexDirection: twoColumns ? 'row' : 'column',
+            gap: spacing.md,
+          }}
+        >
+          <View style={[{ gap: spacing.md }, twoColumns && { flex: 1 }]}>
             {add}
             {overdueCard}
             {todayCard}
+          </View>
+          <View style={[{ gap: spacing.md }, twoColumns && { flex: 1 }]}>
             {comingUpCard}
             <PomodoroTimer />
-          </>
-        )}
+          </View>
+        </View>
       </ScrollView>
     </Screen>
   );

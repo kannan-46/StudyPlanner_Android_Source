@@ -26,6 +26,13 @@ interface RemindersNative {
   openSettings?: (kind: ReminderSettingsKind) => Promise<void>;
   sendTestNotification?: () => Promise<void>;
   clearAll?: () => Promise<void>;
+  scheduleOneShot?: (
+    id: string,
+    atMillis: number,
+    title: string,
+    body: string,
+  ) => Promise<void>;
+  cancelOneShot?: (id: string) => Promise<void>;
 }
 
 function native(): RemindersNative | undefined {
@@ -72,4 +79,23 @@ export async function sendTestNotification(): Promise<void> {
 
 export async function clearReminders(): Promise<void> {
   await native()?.clearAll?.();
+}
+
+/**
+ * Shows a notification (with sound and vibration) at `atMillis`, even when
+ * the app is in the background or closed. Scheduling the same id again
+ * replaces the earlier one. `id`: letters, digits, _ or -.
+ */
+export async function scheduleOneShot(
+  id: string,
+  atMillis: number,
+  title: string,
+  body: string,
+): Promise<void> {
+  await native()?.scheduleOneShot?.(id, atMillis, title, body);
+}
+
+/** Cancels a one-shot alarm and removes its notification if it showed. */
+export async function cancelOneShot(id: string): Promise<void> {
+  await native()?.cancelOneShot?.(id);
 }

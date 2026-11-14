@@ -29,6 +29,8 @@ NativeModules.Reminders = {
   openSettings: jest.fn().mockResolvedValue(undefined),
   sendTestNotification: jest.fn().mockResolvedValue(undefined),
   clearAll: jest.fn().mockResolvedValue(undefined),
+  scheduleOneShot: jest.fn().mockResolvedValue(undefined),
+  cancelOneShot: jest.fn().mockResolvedValue(undefined),
 };
 NativeModules.BackupFiles = {
   exportBackup: jest.fn().mockResolvedValue(undefined),

@@ -1,11 +1,12 @@
-import React from 'react';
-import { NativeModules, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
 import {
-  act,
-  fireEvent,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+  NativeModules,
+  Pressable,
+  Text,
+  useWindowDimensions,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { addDays, localToday, type AgendaItem } from '@planner/shared';
 import { HomeScreen } from '../HomeScreen';
 import {
@@ -146,6 +147,39 @@ describe('HomeScreen', () => {
     );
     expect(await screen.findByText('Topic 2')).toBeOnTheScreen();
     expect(screen.getByTestId('home-columns')).toBeOnTheScreen();
+  });
+
+  it('keeps a running focus timer when the phone is rotated', async () => {
+    // Re-renders HomeScreen on demand, as a window size change does.
+    function Harness() {
+      const [, setN] = useState(0);
+      return (
+        <>
+          <Pressable onPress={() => setN(n => n + 1)}>
+            <Text>re-render</Text>
+          </Pressable>
+          <HomeScreen />
+        </>
+      );
+    }
+    await AsyncStorage.clear();
+    const getItem = AsyncStorage.getItem as jest.Mock;
+    getItem.mockClear();
+    const timerReads = () =>
+      getItem.mock.calls.filter(c => c[0] === 'prefs.focusTimer').length;
+
+    mockDims(360, 800);
+    await renderWithProviders(<Harness />, setup([]));
+    await fireEvent.press(await screen.findByText('Start'));
+    expect(screen.getByText('Pause')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-columns')).toBeNull();
+
+    mockDims(800, 360);
+    await fireEvent.press(screen.getByText('re-render'));
+    expect(screen.getByTestId('home-columns')).toBeOnTheScreen();
+    expect(screen.getByText('Pause')).toBeOnTheScreen();
+    // Same component instance: it never had to reload its saved session.
+    expect(timerReads()).toBe(1);
   });
 
   it('lists overdue revisions apart from today, with plain wording', async () => {

@@ -118,3 +118,58 @@ export async function clearOnboardingStep(): Promise<void> {
     // Best effort.
   }
 }
+
+const KEY_FOCUS_TIMER = 'prefs.focusTimer';
+
+/** A focus session that is running or paused, kept so it survives restarts. */
+export type SavedFocusTimer =
+  | { status: 'running'; endsAt: number; remainingMs: number }
+  | { status: 'paused'; endsAt: null; remainingMs: number };
+
+function parseFocusTimer(raw: string | null): SavedFocusTimer | null {
+  if (!raw) return null;
+  const v = JSON.parse(raw) as Record<string, unknown>;
+  const remainingMs = v.remainingMs;
+  const endsAt = v.endsAt;
+  if (typeof remainingMs !== 'number' || !Number.isFinite(remainingMs)) {
+    return null;
+  }
+  if (
+    v.status === 'running' &&
+    typeof endsAt === 'number' &&
+    Number.isFinite(endsAt)
+  ) {
+    return { status: 'running', endsAt, remainingMs };
+  }
+  if (v.status === 'paused')
+    return { status: 'paused', endsAt: null, remainingMs };
+  return null;
+}
+
+/** Never rejects: storage problems or a slow read mean no saved session. */
+export async function loadFocusTimer(): Promise<SavedFocusTimer | null> {
+  const read = AsyncStorage.getItem(KEY_FOCUS_TIMER).then(parseFocusTimer);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>(resolve => {
+    timer = setTimeout(() => resolve(null), LOAD_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([read, timeout]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Saves the session, or clears it when given null (idle). */
+export async function saveFocusTimer(
+  saved: SavedFocusTimer | null,
+): Promise<void> {
+  try {
+    if (saved === null) await AsyncStorage.removeItem(KEY_FOCUS_TIMER);
+    else await AsyncStorage.setItem(KEY_FOCUS_TIMER, JSON.stringify(saved));
+  } catch {
+    // Best effort: the timer still works, it just won't survive a restart.
+  }
+}

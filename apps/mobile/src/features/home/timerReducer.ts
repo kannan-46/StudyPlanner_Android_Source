@@ -1,3 +1,5 @@
+import type { SavedFocusTimer } from '../../shared/lib/localPrefs';
+
 export const FOCUS_MS = 25 * 60_000;
 
 export type TimerState = {
@@ -14,7 +16,9 @@ export type TimerAction =
   | { type: 'pause'; now: number }
   | { type: 'resume'; now: number }
   | { type: 'reset' }
-  | { type: 'tick'; now: number };
+  | { type: 'tick'; now: number }
+  /** Brings back a session saved before a remount or app restart. */
+  | { type: 'restore'; saved: SavedFocusTimer; now: number };
 
 export const initialTimerState: TimerState = {
   status: 'idle',
@@ -57,6 +61,30 @@ export function timerReducer(
       };
     case 'reset':
       return initialTimerState;
+    case 'restore': {
+      // The user already pressed something: their choice wins.
+      if (state.status !== 'idle') return state;
+      const { saved, now } = action;
+      if (saved.status === 'running' && saved.endsAt !== null) {
+        const remainingMs = Math.min(FOCUS_MS, saved.endsAt - now);
+        if (remainingMs <= 0) return { ...initialTimerState, finished: true };
+        return {
+          status: 'running',
+          remainingMs,
+          endsAt: now + remainingMs,
+          finished: false,
+        };
+      }
+      if (saved.status === 'paused' && saved.remainingMs > 0) {
+        return {
+          status: 'paused',
+          remainingMs: Math.min(FOCUS_MS, saved.remainingMs),
+          endsAt: null,
+          finished: false,
+        };
+      }
+      return initialTimerState;
+    }
     case 'tick': {
       if (state.status !== 'running' || state.endsAt === null) {
         return state.finished ? { ...state, finished: false } : state;

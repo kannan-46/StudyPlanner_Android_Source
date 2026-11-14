@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
       android:name=".MainApplication"
@@ -34,6 +35,7 @@
         </intent-filter>
       </activity>
       <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
+      <receiver android:name=".reminders.OneShotReceiver" android:exported="false" />
       <!-- Exported so the system can deliver its protected broadcasts; the receiver ignores any other action. -->
       <receiver
         android:name=".reminders.SystemEventsReceiver"
