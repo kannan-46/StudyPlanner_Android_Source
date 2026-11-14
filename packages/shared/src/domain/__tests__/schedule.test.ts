@@ -110,8 +110,8 @@ describe('schedule', () => {
 
   it('undo restores the original chain and clears later overrides', () => {
     const a = completeRevision(input0(), 'r1', '2026-11-12');
-    const b = snoozeRevision(s_input(a), 'r2', '2026-11-13', 5);
-    expect(b.revisions[1]!.dueOverride).toBe('2026-11-18');
+    const b = snoozeRevision(s_input(a), 'r2', '2026-11-16', 5);
+    expect(b.revisions[1]!.dueOverride).toBe('2026-11-21');
     const u = undoRevision(s_input(b), 'r1');
     expect(dues(u)).toEqual([
       '2026-11-05',
@@ -123,10 +123,24 @@ describe('schedule', () => {
     expect(u.revisions[0]!.doneOn).toBeNull();
   });
 
-  it('snooze counts from today, not the old due date', () => {
+  it('snooze of an overdue revision counts from today', () => {
     const r = snoozeRevision(input0(), 'r1', '2026-11-20', 1);
     expect(r.revisions[0]!.dueOn).toBe('2026-11-21');
     expect(r.revisions[1]!.dueOn).toBe('2026-11-24');
+  });
+
+  it('snooze of a revision due today moves it to tomorrow', () => {
+    const r = snoozeRevision(input0(), 'r1', '2026-11-05', 1);
+    expect(r.revisions[0]!.dueOn).toBe('2026-11-06');
+  });
+
+  it('snooze never moves a revision that is not due yet earlier', () => {
+    // r1 is due 2026-11-05; snoozing on 2026-11-01 must push it to 11-06.
+    const r = snoozeRevision(input0(), 'r1', '2026-11-01', 1);
+    expect(r.revisions[0]!.dueOn).toBe('2026-11-06');
+    expect(r.revisions[0]!.dueOverride).toBe('2026-11-06');
+    const again = snoozeRevision(s_input(r), 'r1', '2026-11-01', 2);
+    expect(again.revisions[0]!.dueOn).toBe('2026-11-08');
   });
 
   it('snooze validates days and target', () => {

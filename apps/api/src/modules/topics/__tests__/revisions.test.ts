@@ -123,6 +123,17 @@ describe('revisions', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('never snoozes a revision that is not due yet to an earlier date', async () => {
+    const { app, h, revs, base } = await setup('rv-snooze-early');
+    // R1 is due 2026-11-05; snoozing it on 2026-11-02 moves it to 11-06.
+    const res = await post(app, h, `${base}/revisions/${revs[0]!.id}/snooze`, {
+      today: '2026-11-02',
+      days: 1,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.revisions[0].dueOn).toBe('2026-11-06');
+  });
+
   it('completes the topic when every revision is done', async () => {
     const { app, h, revs, base } = await setup('rv-all');
     let last;

@@ -193,7 +193,8 @@ nextDueOn = first revision without doneOn → its dueOn (null if none)
 **Actions:**
 - **Complete:** sets `doneOn` to the client's local today. The app sends it because the server doesn't know the user's day.
 - **Undo:** clears `doneOn`, and the chain recomputes.
-- **Snooze:** sets `dueOverride` to today + days, measured from *today*.
+- **Snooze:** sets `dueOverride` to max(today, current due date) + days, so a
+  snooze never moves a revision earlier (an overdue one counts from *today*).
 - **Editing a topic:** a new studiedOn or new intervals recompute the schedule. Completed revisions keep `doneOn` and are matched by `step`.
 
 Unit tests cover these examples, undo, snooze, interval edits, month and year boundaries, and leap days.
@@ -233,7 +234,8 @@ apps/mobile/src/
 - Offline: a top banner shows "No connection — changes can't be saved right now", and the last data loaded stays visible. It is kept in memory only.
 - Revisions can be acted on from Home, Schedule and Topic detail:
   - **Done** is optimistic, followed by a 5 s "Undo" snackbar.
-  - **Snooze 1 day** is measured from today.
+  - **Snooze 1 day** is measured from today, or from the due date when the
+    revision is not due yet (it never moves a revision earlier).
   - **Undo** is also available on completed rows in Topic detail.
 - After adding a topic, a snackbar says "Thyroid added — first revision 5 Nov".
 - Every list has empty states, and every action shows loading and disabled states.

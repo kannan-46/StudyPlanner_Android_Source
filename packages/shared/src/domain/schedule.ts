@@ -1,4 +1,10 @@
-import { addDays, compareDates, isLocalDate, type LocalDate } from './dates';
+import {
+  addDays,
+  compareDates,
+  isLocalDate,
+  maxDate,
+  type LocalDate,
+} from './dates';
 
 export interface RevisionState {
   id: string;
@@ -214,7 +220,13 @@ export function snoozeRevision(
     fail('VALIDATION_FAILED', 'days must be an integer 1-30');
   }
   assertFirstPending(input, revisionId);
+  // Snooze only ever pushes a revision later: count from today, or from the
+  // current due date when the revision is not due yet.
+  const current = rebuildSchedule(input).revisions.find(
+    r => r.id === revisionId,
+  );
+  const base = maxDate(today, current?.dueOn ?? today);
   return patchRevision(input, revisionId, {
-    dueOverride: addDays(today, days),
+    dueOverride: addDays(base, days),
   });
 }
