@@ -10,8 +10,8 @@ export const mockTestInputSchema = z
   .object({
     title: nameSchema(120),
     takenOn: localDateSchema,
-    score: z.number().min(0),
-    maxScore: z.number().gt(0),
+    score: z.number().min(0, "Score can't be negative"),
+    maxScore: z.number().gt(0, 'Max score must be more than 0'),
     examId: objectIdSchema.nullable().optional(),
     notes: z.string().max(1000).default(''),
   })
@@ -23,8 +23,8 @@ export const mockTestUpdateSchema = z
   .object({
     title: nameSchema(120),
     takenOn: localDateSchema,
-    score: z.number().min(0),
-    maxScore: z.number().gt(0),
+    score: z.number().min(0, "Score can't be negative"),
+    maxScore: z.number().gt(0, 'Max score must be more than 0'),
     examId: objectIdSchema.nullable(),
     notes: z.string().max(1000),
   })

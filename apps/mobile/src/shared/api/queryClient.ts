@@ -34,12 +34,23 @@ function wireFocusManager(): void {
   });
 }
 
+/**
+ * Requests run even when the phone reports no connection: they then fail with
+ * a NETWORK error, so forms and screens show the error and Retry instead of a
+ * spinner that waits (paused) until the connection returns. Data already
+ * loaded stays on screen; it refetches when the connection comes back.
+ */
+export const mutationDefaults = {
+  retry: false,
+  networkMode: 'always',
+} as const;
+
 export function createQueryClient(): QueryClient {
   wireFocusManager();
   return new QueryClient({
     defaultOptions: {
-      queries: { staleTime: 30_000, retry: shouldRetry },
-      mutations: { retry: false },
+      queries: { staleTime: 30_000, retry: shouldRetry, networkMode: 'always' },
+      mutations: mutationDefaults,
     },
   });
 }

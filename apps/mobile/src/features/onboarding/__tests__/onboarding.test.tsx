@@ -92,7 +92,13 @@ describe('ExamStep', () => {
     expect(await screen.findByText('Step 1 of 4')).toBeOnTheScreen();
     const next = screen.getByRole('button', { name: 'Next' });
     expect(next.props.accessibilityState.disabled).toBe(true);
+    expect(
+      screen.getByText('Choose at least one exam to continue'),
+    ).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('NEET SS'));
+    expect(
+      screen.queryByText('Choose at least one exam to continue'),
+    ).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
       expect(http.post).toHaveBeenCalledWith('/v1/exams', { name: 'NEET SS' }),
@@ -240,20 +246,32 @@ describe('RemindersStep', () => {
 });
 
 describe('TopicsStep', () => {
-  it('disables Finish until a topic is added, then completes onboarding', async () => {
+  const finishDisabled = () =>
+    screen.getByRole('button', { name: 'Finish' }).props.accessibilityState
+      .disabled;
+
+  it('disables Finish with a hint until a topic is added, then completes onboarding', async () => {
     const http = makeHttp();
-    http.post.mockResolvedValue(topic());
+    http.post.mockResolvedValue(topic({ name: 'Thyroid' }));
     http.patch.mockResolvedValue({});
     await renderWithProviders(<TopicsStep />, http);
     expect(await screen.findByText('Added: 0 topics')).toBeOnTheScreen();
+    expect(finishDisabled()).toBe(true);
     expect(
-      screen.getByRole('button', { name: 'Finish' }).props.accessibilityState
-        .disabled,
-    ).toBe(true);
-    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Hernia');
+      screen.getByText('Add at least one topic, or tap Skip for now'),
+    ).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Thyroid');
     await fireEvent.press(await screen.findByText('Anatomy'));
-    await fireEvent.press(screen.getByText('Add another'));
+    await fireEvent.press(screen.getByText('Save & add another'));
     expect(await screen.findByText('Added: 1 topic')).toBeOnTheScreen();
+    expect(
+      screen.getByText(
+        `Thyroid added — first revision ${formatDate('2026-11-12')}`,
+      ),
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByText('Add at least one topic, or tap Skip for now'),
+    ).toBeNull();
     expect(screen.getByLabelText('Topic name').props.value).toBe('');
     expect(
       screen.getByRole('radio', { name: 'Anatomy' }).props.accessibilityState
@@ -266,6 +284,83 @@ describe('TopicsStep', () => {
       }),
     );
     await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+  });
+
+  it('Finish saves the typed topic first, then completes onboarding', async () => {
+    const http = makeHttp();
+    http.post.mockResolvedValue(topic({ name: 'Thyroid' }));
+    http.patch.mockResolvedValue({});
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Added: 0 topics');
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Thyroid');
+    expect(finishDisabled()).toBe(false);
+    await fireEvent.press(await screen.findByText('Anatomy'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
+    await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+    expect(http.post).toHaveBeenCalledWith(
+      '/v1/topics',
+      expect.objectContaining({ name: 'Thyroid' }),
+    );
+    expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+      onboardingCompleted: true,
+    });
+    expect(http.post.mock.invocationCallOrder[0]).toBeLessThan(
+      http.patch.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('Finish stops with the error in the form when the typed topic is incomplete', async () => {
+    const http = makeHttp();
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Anatomy');
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Thyroid');
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
+    expect(await screen.findByText('Choose a subject')).toBeOnTheScreen();
+    expect(http.post).not.toHaveBeenCalled();
+    expect(http.patch).not.toHaveBeenCalled();
+    expect(refreshUser).not.toHaveBeenCalled();
+  });
+
+  it('Finish shows the connection error and Retry when offline', async () => {
+    const http = makeHttp([topic()]);
+    http.patch.mockRejectedValueOnce(new ApiError('NETWORK', 0));
+    http.patch.mockResolvedValueOnce({});
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Added: 1 topic');
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
+    expect(
+      await screen.findByText("Can't reach the server — try again"),
+    ).toBeOnTheScreen();
+    expect(finishDisabled()).toBe(false);
+    await fireEvent.press(screen.getByText('Retry'));
+    await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+  });
+
+  it('Skip for now asks before discarding a typed topic', async () => {
+    const http = makeHttp();
+    http.patch.mockResolvedValue({});
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Anatomy');
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Thyroid');
+    await fireEvent.press(screen.getByText('Skip for now'));
+    expect(
+      await screen.findByText('Discard the topic you typed?'),
+    ).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Keep editing'));
+    await waitFor(() =>
+      expect(screen.queryByText('Discard the topic you typed?')).toBeNull(),
+    );
+    expect(http.patch).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Topic name').props.value).toBe('Thyroid');
+
+    await fireEvent.press(screen.getByText('Skip for now'));
+    await fireEvent.press(await screen.findByText('Discard and skip'));
+    await waitFor(() =>
+      expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+        onboardingCompleted: true,
+      }),
+    );
+    expect(http.post).not.toHaveBeenCalled();
   });
 
   it('Skip for now completes onboarding without topics', async () => {

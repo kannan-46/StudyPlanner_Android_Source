@@ -4,7 +4,7 @@ import { render } from '@testing-library/react-native';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { SubjectView, ExamView, TopicView } from '@planner/shared';
-import { createQueryClient } from '../shared/api/queryClient';
+import { createQueryClient, mutationDefaults } from '../shared/api/queryClient';
 import { ApiProvider } from '../shared/api/ApiProvider';
 import type { Http } from '../shared/api/http';
 import {
@@ -107,8 +107,8 @@ export async function cleanupClients() {
 export async function renderWithProviders(ui: React.ReactElement, http: Mocks) {
   const qc = createQueryClient();
   qc.setDefaultOptions({
-    queries: { retry: false },
-    mutations: { retry: false, gcTime: 0 },
+    queries: { retry: false, networkMode: 'always' },
+    mutations: { ...mutationDefaults, gcTime: 0 },
   });
   clients.push(qc);
   return render(

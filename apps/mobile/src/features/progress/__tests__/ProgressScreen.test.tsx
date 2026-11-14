@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert, useWindowDimensions } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { ApiError } from '../../../shared/api/errors';
 import { ProgressScreen } from '../ProgressScreen';
 import {
   ID,
@@ -109,5 +110,54 @@ describe('ProgressScreen', () => {
     await waitFor(() =>
       expect(http.del).toHaveBeenCalledWith(`/v1/mock-tests/${ID(50)}`),
     );
+  });
+
+  const confirmDeleteOf = async (alert: jest.SpyInstance) => {
+    await fireEvent.press(await screen.findByLabelText('Delete Mock A'));
+    const buttons = alert.mock.calls.at(-1)[2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    await act(async () => {
+      buttons.find(b => b.text === 'Delete')?.onPress?.();
+    });
+  };
+
+  it('disables Delete and shows a spinner while deleting', async () => {
+    mockDims(360);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const http = setup();
+    let release!: () => void;
+    http.del.mockImplementation(
+      () => new Promise<void>(resolve => (release = resolve)),
+    );
+    await renderWithProviders(<ProgressScreen />, http);
+    await confirmDeleteOf(alert);
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText('Delete Mock A').props.accessibilityState
+          .disabled,
+      ).toBe(true),
+    );
+    expect(screen.getByLabelText('Deleting')).toBeOnTheScreen();
+    await act(async () => release());
+  });
+
+  it('shows an error at once when deleting offline, but not for an already-deleted test', async () => {
+    mockDims(360);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const http = setup();
+    http.del.mockRejectedValueOnce(new ApiError('NOT_FOUND', 404));
+    await renderWithProviders(<ProgressScreen />, http);
+    await confirmDeleteOf(alert);
+    await waitFor(() => expect(http.del).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByLabelText('Deleting')).toBeNull());
+    expect(screen.queryByText("Couldn't delete — try again")).toBeNull();
+
+    http.del.mockRejectedValueOnce(new ApiError('NETWORK', 0));
+    await confirmDeleteOf(alert);
+    expect(
+      await screen.findByText("Couldn't delete — try again"),
+    ).toBeOnTheScreen();
   });
 });

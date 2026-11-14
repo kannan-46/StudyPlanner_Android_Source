@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { onlineManager } from '@tanstack/react-query';
 import { ApiError } from '../../../shared/api/errors';
 import { MockTestForm } from '../MockTestForm';
 import {
@@ -23,6 +24,60 @@ describe('MockTestForm', () => {
       await screen.findByText('Score cannot exceed max score'),
     ).toBeOnTheScreen();
     expect(http.post).not.toHaveBeenCalled();
+  });
+
+  it('uses plain messages and clears them as the user fixes each field', async () => {
+    const http = makeHttp();
+    await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
+    await fireEvent.changeText(screen.getByLabelText('Score'), '-1');
+    await fireEvent.changeText(screen.getByLabelText('Max score'), '0');
+    await fireEvent.press(screen.getByText('Save'));
+    expect(await screen.findByText('Enter a title')).toBeOnTheScreen();
+    expect(screen.getByText("Score can't be negative")).toBeOnTheScreen();
+    expect(screen.getByText('Max score must be more than 0')).toBeOnTheScreen();
+    expect(screen.queryByText(/Too small|expected/)).toBeNull();
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    expect(screen.queryByText('Enter a title')).toBeNull();
+    expect(screen.getByText("Score can't be negative")).toBeOnTheScreen();
+
+    // Score and max are checked together, so editing either clears both.
+    await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+    expect(screen.queryByText("Score can't be negative")).toBeNull();
+    expect(screen.queryByText('Max score must be more than 0')).toBeNull();
+    expect(http.post).not.toHaveBeenCalled();
+  });
+
+  it('clears the score-above-max error when max score changes', async () => {
+    await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, makeHttp());
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText('Score'), '120');
+    await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+    await fireEvent.press(screen.getByText('Save'));
+    expect(
+      await screen.findByText('Score cannot exceed max score'),
+    ).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByLabelText('Max score'), '150');
+    expect(screen.queryByText('Score cannot exceed max score')).toBeNull();
+  });
+
+  it('fails fast with Retry when the phone is offline', async () => {
+    onlineManager.setOnline(false);
+    try {
+      const http = makeHttp();
+      http.post.mockRejectedValue(new ApiError('NETWORK', 0));
+      await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
+      await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+      await fireEvent.changeText(screen.getByLabelText('Score'), '80');
+      await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+      await fireEvent.press(screen.getByText('Save'));
+      expect(
+        await screen.findByText("Can't reach the server — try again"),
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('button-spinner')).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it('keeps the draft on a network error and retries', async () => {

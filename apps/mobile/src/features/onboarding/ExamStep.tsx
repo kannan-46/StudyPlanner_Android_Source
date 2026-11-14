@@ -192,6 +192,7 @@ export function ExamStep() {
           onPress={next}
           loading={saving}
           disabled={selected.length === 0}
+          disabledHint="Choose at least one exam to continue"
         />
       </View>
     </StepShell>

@@ -1,8 +1,16 @@
 import React from 'react';
-import { Text, TextInput, View, type TextInputProps } from 'react-native';
+import {
+  Text,
+  TextInput,
+  View,
+  type TextInputInstance,
+  type TextInputProps,
+} from 'react-native';
 import { useTheme } from './ThemeProvider';
 
 export type TextFieldProps = Omit<TextInputProps, 'style'> & {
+  /** The input itself, e.g. to focus the first invalid field. */
+  ref?: React.Ref<TextInputInstance>;
   label: string;
   value: string;
   onChangeText: (t: string) => void;
@@ -16,6 +24,7 @@ export function TextField({
   onChangeText,
   error,
   multiline,
+  ref,
   ...rest
 }: TextFieldProps) {
   const { colors, radius, spacing } = useTheme();
@@ -25,6 +34,7 @@ export function TextField({
         {label}
       </Text>
       <TextInput
+        ref={ref}
         accessibilityLabel={label}
         placeholderTextColor={colors.muted}
         {...rest}

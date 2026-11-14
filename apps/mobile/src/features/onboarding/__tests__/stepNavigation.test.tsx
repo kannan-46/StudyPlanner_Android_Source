@@ -205,7 +205,7 @@ describe('step 4 with a topic half typed', () => {
     await renderFlow(4, http);
     await typeName();
     await fireEvent.press(await screen.findByText('Anatomy'));
-    await fireEvent.press(screen.getByText('Add another'));
+    await fireEvent.press(screen.getByText('Save & add another'));
     expect(await screen.findByText('Added: 1 topic')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByText('Step 3 of 4')).toBeOnTheScreen();

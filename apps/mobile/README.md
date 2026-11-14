@@ -133,6 +133,9 @@ JS in `src/`:
   `api.ts` (HTTP calls) and `hooks.ts` (TanStack Query) plus screens.
 - `native/` - typed wrappers over the native modules.
 - `shared/api` - http client, token store (Keychain), query client, errors.
+  The query client runs queries and mutations even when the phone is offline
+  (`networkMode: 'always'`), so they fail fast with a NETWORK error and the
+  screen shows its error and Retry instead of a paused spinner.
 - `shared/lib` - formatting, `useOnline`, `useAppForeground`,
   `useRefetchOnFocus`, `localPrefs` (AsyncStorage wrapper, mocked in
   `jest.setup.ts`).

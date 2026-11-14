@@ -1,9 +1,17 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MockTestView } from '@planner/shared';
 import type { RootStackParamList } from '../../app/RootNavigator';
+import { ApiError } from '../../shared/api/errors';
 import { formatDate } from '../../shared/lib/format';
 import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { Button } from '../../shared/ui/Button';
@@ -41,8 +49,11 @@ export function ProgressScreen() {
         style: 'destructive',
         onPress: () =>
           del.mutate(t.id, {
-            onError: () =>
-              snackbar.show({ message: "Couldn't delete — try again" }),
+            onError: e => {
+              // Already gone (e.g. deleted on another device): nothing to undo.
+              if (e instanceof ApiError && e.code === 'NOT_FOUND') return;
+              snackbar.show({ message: "Couldn't delete — try again" });
+            },
           }),
       },
     ]);
@@ -194,46 +205,60 @@ export function ProgressScreen() {
           ) : testsQ.data.length === 0 ? (
             <Text style={{ color: colors.muted }}>No mock tests yet</Text>
           ) : (
-            testsQ.data.map(t => (
-              <Pressable
-                key={t.id}
-                accessibilityHint="Long press to delete"
-                onLongPress={() => confirmDelete(t)}
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  minHeight: 48,
-                  paddingVertical: spacing.xs,
-                }}
-              >
-                <View style={{ flexShrink: 1, flexGrow: 1 }}>
-                  <Text style={{ color: colors.text, fontWeight: '600' }}>
-                    {t.title}
-                  </Text>
-                  <Text style={{ color: colors.muted }}>
-                    {formatDate(t.takenOn)} · {t.score}/{t.maxScore} ·{' '}
-                    {t.percent}%
-                  </Text>
-                </View>
+            testsQ.data.map(t => {
+              const deleting = del.isPending && del.variables === t.id;
+              return (
                 <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Delete ${t.title}`}
-                  onPress={() => confirmDelete(t)}
+                  key={t.id}
+                  accessibilityHint="Long press to delete"
+                  onLongPress={() => confirmDelete(t)}
+                  disabled={deleting}
                   style={{
-                    minHeight: 48,
-                    minWidth: 48,
-                    justifyContent: 'center',
+                    opacity: deleting ? 0.5 : 1,
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
                     alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: 48,
+                    paddingVertical: spacing.xs,
                   }}
                 >
-                  <Text style={{ color: colors.danger, fontWeight: '600' }}>
-                    Delete
-                  </Text>
+                  <View style={{ flexShrink: 1, flexGrow: 1 }}>
+                    <Text style={{ color: colors.text, fontWeight: '600' }}>
+                      {t.title}
+                    </Text>
+                    <Text style={{ color: colors.muted }}>
+                      {formatDate(t.takenOn)} · {t.score}/{t.maxScore} ·{' '}
+                      {t.percent}%
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${t.title}`}
+                    accessibilityState={{ disabled: deleting, busy: deleting }}
+                    disabled={deleting}
+                    onPress={() => confirmDelete(t)}
+                    style={{
+                      minHeight: 48,
+                      minWidth: 48,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator
+                        color={colors.danger}
+                        accessibilityLabel="Deleting"
+                      />
+                    ) : (
+                      <Text style={{ color: colors.danger, fontWeight: '600' }}>
+                        Delete
+                      </Text>
+                    )}
+                  </Pressable>
                 </Pressable>
-              </Pressable>
-            ))
+              );
+            })
           )}
           <View style={{ alignItems: 'flex-start', marginTop: spacing.sm }}>
             <Button

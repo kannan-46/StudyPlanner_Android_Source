@@ -69,6 +69,8 @@ export function MockTestForm({
         const msg =
           numeric && issue.code === 'invalid_type'
             ? 'Enter a number'
+            : key === 'title' && issue.code === 'too_small'
+            ? 'Enter a title'
             : issue.message;
         const field = (FIELDS.includes(key) ? key : 'form') as Field;
         next[field] ??= msg;
@@ -88,6 +90,16 @@ export function MockTestForm({
     }
   }
 
+  /** Editing a field clears its own error (score and max go together). */
+  const clearErrors = (...fields: Field[]) => {
+    setSubmitError(null);
+    setErrors(e => {
+      const next = { ...e, form: undefined };
+      for (const f of fields) next[f] = undefined;
+      return next;
+    });
+  };
+
   const examOptions = (examsQ.data ?? []).map(e => ({
     value: e.id,
     label: e.name,
@@ -98,14 +110,20 @@ export function MockTestForm({
       <TextField
         label="Title"
         value={title}
-        onChangeText={setTitle}
+        onChangeText={t => {
+          setTitle(t);
+          clearErrors('title');
+        }}
         error={errors.title}
         maxLength={120}
       />
       <DateField
         label="Date"
         value={takenOn}
-        onChange={setTakenOn}
+        onChange={d => {
+          setTakenOn(d);
+          clearErrors('takenOn');
+        }}
         maximumDate={localToday()}
       />
       {errors.takenOn ? (
@@ -116,14 +134,20 @@ export function MockTestForm({
       <TextField
         label="Score"
         value={score}
-        onChangeText={setScore}
+        onChangeText={t => {
+          setScore(t);
+          clearErrors('score', 'maxScore');
+        }}
         error={errors.score}
         keyboardType="decimal-pad"
       />
       <TextField
         label="Max score"
         value={maxScore}
-        onChangeText={setMaxScore}
+        onChangeText={t => {
+          setMaxScore(t);
+          clearErrors('score', 'maxScore');
+        }}
         error={errors.maxScore}
         keyboardType="decimal-pad"
       />
@@ -135,7 +159,10 @@ export function MockTestForm({
           <ChipSelect
             options={examOptions}
             value={examId}
-            onChange={v => setExamId(examId === v ? '' : (v as string))}
+            onChange={v => {
+              setExamId(examId === v ? '' : (v as string));
+              clearErrors();
+            }}
           />
         </View>
       ) : null}
