@@ -22,8 +22,10 @@ import { Card } from '../../shared/ui/Card';
 import { ChipSelect } from '../../shared/ui/ChipSelect';
 import { EmptyState } from '../../shared/ui/EmptyState';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { columnsFor, useResponsive } from '../../shared/ui/responsive';
 import { Screen } from '../../shared/ui/Screen';
+import { useSnackbarInsetWhileFocused } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useExams } from '../exams/hooks';
 import { useSubjects } from '../subjects/hooks';
@@ -32,6 +34,8 @@ import { useTopics } from './hooks';
 import { TopicDetailContent } from './TopicDetailScreen';
 
 type Status = 'active' | 'completed';
+
+const FAB_HEIGHT = 48;
 
 function progressLabel(t: TopicView): string {
   const total = t.revisions.length;
@@ -119,7 +123,9 @@ export function TopicsScreen() {
   if (subjectId) query.subjectId = subjectId;
   if (examId) query.examId = examId;
 
-  const topicsQ = useTopics(query);
+  // While a new search or filter loads, the last results stay on screen.
+  const topicsQ = useTopics(query, { keepPrevious: true });
+  const updating = topicsQ.isPlaceholderData;
   const subjectsQ = useSubjects();
   useRefetchOnFocus(() => topicsQ.refetch());
   const examsQ = useExams();
@@ -143,27 +149,41 @@ export function TopicsScreen() {
   };
 
   const columns = expanded ? 1 : columnsFor(size);
-  const allOption = { value: '', label: 'All' };
+  // Snackbars sit above the floating "+ Add topic" button.
+  useSnackbarInsetWhileFocused('topicsFab', FAB_HEIGHT + spacing.lg);
+  const filterLabel = (text: string) => (
+    <Text style={{ color: colors.muted }}>{text}</Text>
+  );
 
   const header = (
     <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
-      <TextInput
-        accessibilityLabel="Search topics"
-        placeholder="Search topics"
-        placeholderTextColor={colors.muted}
-        value={search}
-        onChangeText={setSearch}
-        style={{
-          minHeight: 48,
-          color: colors.text,
-          backgroundColor: colors.input,
-          borderColor: colors.line,
-          borderWidth: 1,
-          borderRadius: radius.md,
-          paddingHorizontal: spacing.md,
-          fontSize: 16,
-        }}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TextInput
+          accessibilityLabel="Search topics"
+          placeholder="Search topics"
+          placeholderTextColor={colors.muted}
+          value={search}
+          onChangeText={setSearch}
+          style={{
+            minHeight: 48,
+            color: colors.text,
+            backgroundColor: colors.input,
+            borderColor: colors.line,
+            borderWidth: 1,
+            borderRadius: radius.md,
+            paddingHorizontal: spacing.md,
+            fontSize: 16,
+            flex: 1,
+          }}
+        />
+        {updating ? (
+          <ActivityIndicator
+            color={colors.accent}
+            accessibilityLabel="Updating list"
+            style={{ marginLeft: spacing.sm }}
+          />
+        ) : null}
+      </View>
       <ChipSelect
         options={[
           { value: 'active', label: 'Active' },
@@ -173,27 +193,33 @@ export function TopicsScreen() {
         onChange={v => setStatus(v as Status)}
       />
       {(subjectsQ.data?.length ?? 0) > 0 ? (
-        <ChipSelect
-          options={[
-            allOption,
-            ...(subjectsQ.data ?? []).map(s => ({
-              value: s.id,
-              label: s.name,
-            })),
-          ]}
-          value={subjectId}
-          onChange={v => setSubjectId(v as string)}
-        />
+        <>
+          {filterLabel('Subject')}
+          <ChipSelect
+            options={[
+              { value: '', label: 'All subjects' },
+              ...(subjectsQ.data ?? []).map(s => ({
+                value: s.id,
+                label: s.name,
+              })),
+            ]}
+            value={subjectId}
+            onChange={v => setSubjectId(v as string)}
+          />
+        </>
       ) : null}
       {(examsQ.data?.length ?? 0) > 0 ? (
-        <ChipSelect
-          options={[
-            allOption,
-            ...(examsQ.data ?? []).map(e => ({ value: e.id, label: e.name })),
-          ]}
-          value={examId}
-          onChange={v => setExamId(v as string)}
-        />
+        <>
+          {filterLabel('Exam')}
+          <ChipSelect
+            options={[
+              { value: '', label: 'All exams' },
+              ...(examsQ.data ?? []).map(e => ({ value: e.id, label: e.name })),
+            ]}
+            value={examId}
+            onChange={v => setExamId(v as string)}
+          />
+        </>
       ) : null}
     </View>
   );
@@ -213,16 +239,18 @@ export function TopicsScreen() {
         }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            colors={[colors.accent]}
+            tintColor={colors.accent}
+            progressBackgroundColor={colors.surface}
+          />
         }
         ListHeaderComponent={header}
         ListEmptyComponent={
           topicsQ.isPending ? (
-            <ActivityIndicator
-              color={colors.accent}
-              accessibilityLabel="Loading"
-              style={{ marginTop: spacing.xl }}
-            />
+            <Loading />
           ) : topicsQ.error ? (
             <ErrorRetry
               error={topicsQ.error}
@@ -239,6 +267,7 @@ export function TopicsScreen() {
             />
           )
         }
+        style={{ opacity: updating ? 0.6 : 1 }}
         renderItem={({ item }) => (
           <TopicRow
             topic={item}
@@ -256,7 +285,7 @@ export function TopicsScreen() {
           position: 'absolute',
           right: spacing.lg,
           bottom: spacing.lg,
-          minHeight: 48,
+          minHeight: FAB_HEIGHT,
           minWidth: 48,
           paddingHorizontal: spacing.lg,
           justifyContent: 'center',

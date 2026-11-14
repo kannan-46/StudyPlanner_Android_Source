@@ -29,7 +29,7 @@ export type RootStackParamList = {
   TopicDetail: { topicId: string };
   ReminderHealth: undefined;
   ManageExamsSubjects: undefined;
-  MockTestForm: undefined;
+  MockTestForm: { id?: string } | undefined;
 };
 
 declare global {
@@ -123,7 +123,9 @@ function RootScreens() {
       <Stack.Screen
         name="MockTestForm"
         component={MockTestFormScreen}
-        options={{ title: 'Add mock test' }}
+        options={({ route }) => ({
+          title: route.params?.id ? 'Edit mock test' : 'Add mock test',
+        })}
       />
     </Stack.Navigator>
   );

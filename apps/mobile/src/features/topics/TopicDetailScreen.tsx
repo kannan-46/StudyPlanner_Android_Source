@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import {
   useNavigation,
   useRoute,
@@ -13,6 +13,7 @@ import { formatDate } from '../../shared/lib/format';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { Screen } from '../../shared/ui/Screen';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
@@ -99,9 +100,7 @@ export function TopicDetailContent({
   useRefetchOnFocus(() => topicQ.refetch());
 
   if (topicQ.isPending) {
-    return (
-      <ActivityIndicator color={colors.accent} accessibilityLabel="Loading" />
-    );
+    return <Loading />;
   }
   if (!topicQ.data) {
     return <ErrorRetry error={topicQ.error} onRetry={() => topicQ.refetch()} />;

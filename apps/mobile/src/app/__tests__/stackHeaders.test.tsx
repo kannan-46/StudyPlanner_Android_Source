@@ -109,6 +109,54 @@ describe('pushed screens have a titled header with a back button', () => {
     );
   });
 
+  it('opens a saved mock test as "Edit mock test" with its values', async () => {
+    const http = http0();
+    const known = http.get.getMockImplementation() as (p: string) => unknown;
+    http.get.mockImplementation((path: string) =>
+      path === '/v1/mock-tests'
+        ? Promise.resolve([
+            {
+              id: 'm1',
+              title: 'Mock A',
+              takenOn: '2026-11-01',
+              score: 7,
+              maxScore: 100,
+              percent: 7,
+              examId: null,
+              notes: '',
+            },
+          ])
+        : known(path),
+    );
+    http.patch.mockResolvedValue({ id: 'm1' });
+    await setup(http);
+    await go('MockTestForm', { id: 'm1' });
+    expect(
+      await screen.findByRole('header', { name: 'Edit mock test' }),
+    ).toBeTruthy();
+    const score = await screen.findByLabelText('Score');
+    expect(score.props.value).toBe('7');
+    await fireEvent.changeText(score, '70');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(currentRoute()).not.toBe('MockTestForm'));
+    expect(http.patch).toHaveBeenCalledWith(
+      '/v1/mock-tests/m1',
+      expect.objectContaining({ score: 70 }),
+    );
+    expect(await screen.findByText('Mock test saved')).toBeTruthy();
+  });
+
+  it('says so when the mock test being edited was deleted', async () => {
+    const http = http0();
+    const known = http.get.getMockImplementation() as (p: string) => unknown;
+    http.get.mockImplementation((path: string) =>
+      path === '/v1/mock-tests' ? Promise.resolve([]) : known(path),
+    );
+    await setup(http);
+    await go('MockTestForm', { id: 'gone' });
+    expect(await screen.findByText('This mock test was deleted.')).toBeTruthy();
+  });
+
   it('titles topic detail with the topic name, shown once', async () => {
     await setup();
     await go('TopicDetail', { topicId: topic().id });

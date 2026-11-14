@@ -4,6 +4,7 @@ import {
   localToday,
   mockTestInputSchema,
   type LocalDate,
+  type MockTestView,
 } from '@planner/shared';
 import { Button } from '../../shared/ui/Button';
 import { ChipSelect } from '../../shared/ui/ChipSelect';
@@ -12,7 +13,7 @@ import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { TextField } from '../../shared/ui/TextField';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useExams } from '../exams/hooks';
-import { useCreateMockTest } from './hooks';
+import { useCreateMockTest, useUpdateMockTest } from './hooks';
 
 type Field = 'title' | 'takenOn' | 'score' | 'maxScore' | 'form';
 type Errors = Partial<Record<Field, string>>;
@@ -22,9 +23,12 @@ const toNumber = (t: string) =>
   t.trim() === '' ? NaN : Number(t.trim().replace(',', '.'));
 
 export function MockTestForm({
+  initial,
   onSaved,
   onDirtyChange,
 }: {
+  /** The saved test, when editing; the form starts with its values. */
+  initial?: MockTestView;
   onSaved: () => void;
   /** Told whether anything has been typed or changed. */
   onDirtyChange?: (dirty: boolean) => void;
@@ -32,22 +36,29 @@ export function MockTestForm({
   const { colors, spacing } = useTheme();
   const examsQ = useExams();
   const create = useCreateMockTest();
+  const update = useUpdateMockTest();
 
-  const [title, setTitle] = useState('');
-  const [takenOn, setTakenOn] = useState<LocalDate>(localToday());
-  const [score, setScore] = useState('');
-  const [maxScore, setMaxScore] = useState('');
-  const [examId, setExamId] = useState('');
+  const start = useRef({
+    title: initial?.title ?? '',
+    takenOn: initial?.takenOn ?? localToday(),
+    score: initial ? String(initial.score) : '',
+    maxScore: initial ? String(initial.maxScore) : '',
+    examId: initial?.examId ?? '',
+  }).current;
+  const [title, setTitle] = useState(start.title);
+  const [takenOn, setTakenOn] = useState<LocalDate>(start.takenOn);
+  const [score, setScore] = useState(start.score);
+  const [maxScore, setMaxScore] = useState(start.maxScore);
+  const [examId, setExamId] = useState(start.examId);
   const [errors, setErrors] = useState<Errors>({});
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
-  const openedOn = useRef(takenOn).current;
   const dirty =
-    title !== '' ||
-    score !== '' ||
-    maxScore !== '' ||
-    examId !== '' ||
-    takenOn !== openedOn;
+    title !== start.title ||
+    score !== start.score ||
+    maxScore !== start.maxScore ||
+    examId !== start.examId ||
+    takenOn !== start.takenOn;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -60,6 +71,7 @@ export function MockTestForm({
       score: toNumber(score),
       maxScore: toNumber(maxScore),
       examId: examId || null,
+      notes: initial?.notes ?? '',
     });
     if (!parsed.success) {
       const next: Errors = {};
@@ -81,7 +93,22 @@ export function MockTestForm({
     setErrors({});
     setSaving(true);
     try {
-      await create.mutateAsync(parsed.data);
+      if (initial) {
+        // Notes are not edited here, so they are left as they are.
+        const d = parsed.data;
+        await update.mutateAsync({
+          id: initial.id,
+          patch: {
+            title: d.title,
+            takenOn: d.takenOn,
+            score: d.score,
+            maxScore: d.maxScore,
+            examId: d.examId ?? null,
+          },
+        });
+      } else {
+        await create.mutateAsync(parsed.data);
+      }
       onSaved();
     } catch (e) {
       setSubmitError(e);
@@ -172,7 +199,11 @@ export function MockTestForm({
         </Text>
       ) : null}
       {submitError ? <ErrorRetry error={submitError} onRetry={submit} /> : null}
-      <Button title="Save" onPress={submit} loading={saving} />
+      <Button
+        title={initial ? 'Save changes' : 'Save'}
+        onPress={submit}
+        loading={saving}
+      />
     </View>
   );
 }

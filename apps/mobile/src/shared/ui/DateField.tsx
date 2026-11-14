@@ -24,18 +24,29 @@ export function DateField({
   value,
   onChange,
   maximumDate,
+  minimumDate,
+  emptyText = 'No date set',
 }: {
   label: string;
-  value: LocalDate;
+  /** null shows emptyText; the picker then opens on today (or the minimum). */
+  value: LocalDate | null;
   onChange: (d: LocalDate) => void;
   maximumDate?: LocalDate;
+  minimumDate?: LocalDate;
+  emptyText?: string;
 }) {
   const { colors, radius, spacing } = useTheme();
   const [open, setOpen] = useState(false);
   const handle = (e: DateTimePickerEvent, d?: Date) => {
     setOpen(Platform.OS === 'ios');
-    if (e.type === 'set' && d) onChange(toLocalDate(d));
+    if (e.type !== 'set' || !d) return;
+    const picked = toLocalDate(d);
+    if (minimumDate && picked < minimumDate) return;
+    onChange(picked);
   };
+  let start = value ?? toLocalDate(new Date());
+  if (minimumDate && start < minimumDate) start = minimumDate;
+  if (maximumDate && start > maximumDate) start = maximumDate;
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={{ color: colors.muted, marginBottom: spacing.xs }}>
@@ -55,15 +66,18 @@ export function DateField({
           borderRadius: radius.md,
         }}
       >
-        <Text style={{ color: colors.text, fontSize: 16 }}>
-          {formatDate(value)}
+        <Text
+          style={{ color: value ? colors.text : colors.muted, fontSize: 16 }}
+        >
+          {value ? formatDate(value) : emptyText}
         </Text>
       </Pressable>
       {open ? (
         <DateTimePicker
-          value={fromLocalDate(value)}
+          value={fromLocalDate(start)}
           mode="date"
           maximumDate={maximumDate ? fromLocalDate(maximumDate) : undefined}
+          minimumDate={minimumDate ? fromLocalDate(minimumDate) : undefined}
           onChange={handle}
         />
       ) : null}

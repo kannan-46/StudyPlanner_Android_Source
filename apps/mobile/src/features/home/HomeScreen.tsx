@@ -19,6 +19,7 @@ import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 import { EmptyState } from '../../shared/ui/EmptyState';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { useResponsive } from '../../shared/ui/responsive';
 import { Screen } from '../../shared/ui/Screen';
 import { useTheme } from '../../shared/ui/ThemeProvider';
@@ -179,7 +180,7 @@ export function HomeScreen() {
     <Card>
       {heading('Today')}
       {agendaQ.isPending ? (
-        <Text style={{ color: colors.muted }}>Loading…</Text>
+        <Loading inline />
       ) : agendaQ.error && !agendaQ.data ? (
         <ErrorRetry error={agendaQ.error} onRetry={() => agendaQ.refetch()} />
       ) : dueToday.length === 0 ? (
@@ -194,7 +195,7 @@ export function HomeScreen() {
     <Card>
       {heading('Coming up')}
       {agendaQ.isPending ? (
-        <Text style={{ color: colors.muted }}>Loading…</Text>
+        <Loading inline />
       ) : agendaQ.error && !agendaQ.data ? (
         <ErrorRetry error={agendaQ.error} onRetry={() => agendaQ.refetch()} />
       ) : upcoming.length === 0 ? (

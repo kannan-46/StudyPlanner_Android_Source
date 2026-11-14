@@ -110,11 +110,56 @@ describe('backup', () => {
         examId: exams.find(e => e.name === 'NEET SS')?.id,
       }),
     ]);
+  });
+
+  it('merge leaves the user settings untouched', async () => {
+    const app = build();
+    const a = await signIn(app, 'bk-merge-settings');
+    const h = bearer(a.accessToken);
+    const mine = {
+      intervals: [3, 9, 27],
+      reminderTime: '21:00',
+      theme: 'light',
+      dailyReminder: false,
+    };
+    const patched = await request(app)
+      .patch('/v1/me')
+      .set(h)
+      .send({ settings: mine });
+    expect(patched.status).toBe(200);
+    const exp = await request(app).get('/v1/backup').set(h);
+    // A legacy file and a v1 file that both carry different settings.
+    const otherV1 = {
+      ...exp.body,
+      settings: {
+        ...exp.body.settings,
+        intervals: [4, 7, 15],
+        reminderTime: '07:30',
+        theme: 'dark',
+        dailyReminder: true,
+      },
+    };
+    expect((await importFile(app, a.accessToken, legacyFile)).status).toBe(200);
+    expect((await importFile(app, a.accessToken, otherV1)).status).toBe(200);
+    const me = (await request(app).get('/v1/me').set(h)).body;
+    expect(me.settings).toMatchObject(mine);
+  });
+
+  it('replace restores reminder and interval settings but keeps the theme', async () => {
+    const app = build();
+    const a = await signIn(app, 'bk-replace-settings');
+    const h = bearer(a.accessToken);
+    await request(app)
+      .patch('/v1/me')
+      .set(h)
+      .send({ settings: { theme: 'light', reminderTime: '21:00' } });
+    const res = await importFile(app, a.accessToken, legacyFile, 'replace');
+    expect(res.status).toBe(200);
     const me = (await request(app).get('/v1/me').set(h)).body;
     expect(me.settings).toMatchObject({
       intervals: [4, 7, 15, 30],
       reminderTime: '07:30',
-      theme: 'dark',
+      theme: 'light',
     });
   });
 

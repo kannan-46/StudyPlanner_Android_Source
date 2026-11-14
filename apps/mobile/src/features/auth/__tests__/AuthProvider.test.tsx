@@ -21,7 +21,12 @@ import {
   GoogleAuthError,
 } from '../../../native/googleAuth';
 import { clearReminders } from '../../../native/reminders';
-import { AuthProvider, useAuth, notifySessionEnded } from '../AuthProvider';
+import {
+  AuthProvider,
+  LOGOUT_TIMEOUT_MS,
+  useAuth,
+  notifySessionEnded,
+} from '../AuthProvider';
 import { SignInScreen } from '../SignInScreen';
 
 jest.mock('../../../shared/api/tokenStore', () => ({
@@ -235,6 +240,46 @@ it('signOut still completes when logout fails', async () => {
   await fireEvent.press(screen.getByTestId('out'));
   await waitFor(() => expect(probe()).toBe('signedOut'));
   expect(ts.clear).toHaveBeenCalled();
+});
+
+it('signOut is immediate even when the server never answers', async () => {
+  await signedInSetup();
+  jest.useFakeTimers();
+  const timeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+  try {
+    http.post.mockReturnValue(new Promise(() => {}));
+    await fireEvent.press(screen.getByTestId('out'));
+    await waitFor(() => expect(probe()).toBe('signedOut'));
+    expect(ts.clear).toHaveBeenCalled();
+    expect(http.post).toHaveBeenCalledWith('/v1/auth/logout', {
+      refreshToken: 'r',
+    });
+    expect(timeoutSpy).toHaveBeenCalledWith(
+      expect.any(Function),
+      LOGOUT_TIMEOUT_MS,
+    );
+    // The background logout gives up after the short timeout, quietly.
+    await act(async () => {
+      jest.advanceTimersByTime(LOGOUT_TIMEOUT_MS);
+    });
+    expect(probe()).toBe('signedOut');
+  } finally {
+    timeoutSpy.mockRestore();
+    jest.useRealTimers();
+  }
+});
+
+it('signOut clears the phone before contacting the server', async () => {
+  await signedInSetup();
+  const order: string[] = [];
+  ts.clear.mockImplementation(async () => {
+    order.push('clear');
+  });
+  http.post.mockImplementation(async () => {
+    order.push('logout');
+  });
+  await fireEvent.press(screen.getByTestId('out'));
+  await waitFor(() => expect(order).toEqual(['clear', 'logout']));
 });
 
 it('onSessionEnded triggers local sign-out', async () => {

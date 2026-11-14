@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { ActivityIndicator } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import type { TopicView } from '@planner/shared';
 import type { RootStackParamList } from '../../app/RootNavigator';
 import { formatDate } from '../../shared/lib/format';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { Screen } from '../../shared/ui/Screen';
 import { useSnackbar } from '../../shared/ui/Snackbar';
-import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useLeaveGuard } from '../../shared/ui/useLeaveGuard';
 import { useTopic } from './hooks';
 import { TopicForm } from './TopicForm';
@@ -21,7 +20,6 @@ function EditLoader({
   onSaved: (t: TopicView) => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
-  const { colors } = useTheme();
   const topicQ = useTopic(topicId);
   if (topicQ.data) {
     return (
@@ -34,9 +32,7 @@ function EditLoader({
     );
   }
   if (topicQ.isPending) {
-    return (
-      <ActivityIndicator color={colors.accent} accessibilityLabel="Loading" />
-    );
+    return <Loading />;
   }
   return <ErrorRetry error={topicQ.error} onRetry={() => topicQ.refetch()} />;
 }

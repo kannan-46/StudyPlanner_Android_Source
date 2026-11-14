@@ -11,12 +11,13 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MockTestView } from '@planner/shared';
 import type { RootStackParamList } from '../../app/RootNavigator';
-import { ApiError } from '../../shared/api/errors';
+import { ApiError, userMessage } from '../../shared/api/errors';
 import { formatDate } from '../../shared/lib/format';
 import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { useResponsive } from '../../shared/ui/responsive';
 import { Screen } from '../../shared/ui/Screen';
 import { useSnackbar } from '../../shared/ui/Snackbar';
@@ -52,7 +53,7 @@ export function ProgressScreen() {
             onError: e => {
               // Already gone (e.g. deleted on another device): nothing to undo.
               if (e instanceof ApiError && e.code === 'NOT_FOUND') return;
-              snackbar.show({ message: "Couldn't delete — try again" });
+              snackbar.show({ message: userMessage(e) });
             },
           }),
       },
@@ -73,13 +74,16 @@ export function ProgressScreen() {
   );
 
   const stats = statsQ.data;
+  // Topic counts match what Home shows (one row per topic); revision counts
+  // say "revisions" so the two units are never mixed up.
   const tiles: [string, number][] = stats
     ? [
-        ['Topics', stats.topics],
+        ['Topics due today', stats.dueToday],
+        ['Topics overdue', stats.overdue],
         ['Revisions done', stats.revisionsDone],
-        ['Pending', stats.revisionsPending],
-        ['Overdue', stats.overdue],
-        ['Completed topics', stats.completedTopics],
+        ['Revisions still to do', stats.revisionsPending],
+        ['Topics in total', stats.topics],
+        ['Topics completed', stats.completedTopics],
       ]
     : [];
   const maxCount = Math.max(
@@ -106,7 +110,7 @@ export function ProgressScreen() {
         </Text>
 
         {statsQ.isPending ? (
-          <Text style={{ color: colors.muted }}>Loading…</Text>
+          <Loading inline />
         ) : !stats ? (
           <ErrorRetry error={statsQ.error} onRetry={() => statsQ.refetch()} />
         ) : (
@@ -199,7 +203,7 @@ export function ProgressScreen() {
         <Card>
           {heading('Mock tests')}
           {testsQ.isPending ? (
-            <Text style={{ color: colors.muted }}>Loading…</Text>
+            <Loading inline />
           ) : !testsQ.data ? (
             <ErrorRetry error={testsQ.error} onRetry={() => testsQ.refetch()} />
           ) : testsQ.data.length === 0 ? (
@@ -210,7 +214,12 @@ export function ProgressScreen() {
               return (
                 <Pressable
                   key={t.id}
-                  accessibilityHint="Long press to delete"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${t.title}`}
+                  accessibilityHint="Opens the mock test so you can correct it"
+                  onPress={() =>
+                    navigation.navigate('MockTestForm', { id: t.id })
+                  }
                   onLongPress={() => confirmDelete(t)}
                   disabled={deleting}
                   style={{

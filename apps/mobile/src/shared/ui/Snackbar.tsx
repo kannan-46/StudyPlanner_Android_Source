@@ -9,6 +9,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeProvider';
 
@@ -38,12 +39,46 @@ export function useSnackbar(): Ctx {
   return useContext(SnackbarContext);
 }
 
+type InsetCtx = (key: string, px: number | null) => void;
+const SnackbarInsetContext = createContext<InsetCtx>(() => {});
+
+/**
+ * While the calling screen is focused, lifts the snackbar by `px` so it sits
+ * above the tab bar or a floating button instead of covering them. Lifts from
+ * different keys add up (tab bar + button); leaving the screen drops its lift.
+ */
+export function useSnackbarInsetWhileFocused(key: string, px: number) {
+  const setInset = useContext(SnackbarInsetContext);
+  useFocusEffect(
+    useCallback(() => {
+      setInset(key, px > 0 ? px : null);
+      return () => setInset(key, null);
+    }, [setInset, key, px]),
+  );
+}
+
 export function SnackbarProvider({ children }: { children: ReactNode }) {
   const { colors, radius, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const [current, setCurrent] = useState<SnackbarOptions | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastId = useRef(0);
+  const [lifts, setLifts] = useState<Record<string, number>>({});
+  const setInset = useCallback<InsetCtx>((key, px) => {
+    setLifts(prev => {
+      if (px === null) {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return prev[key] === px ? prev : { ...prev, [key]: px };
+    });
+  }, []);
+  const lifted = Object.values(lifts).reduce((a, b) => a + b, 0);
+  // Above the tab bar / floating button when a screen reports them, else just
+  // clear of the phone's gesture area.
+  const bottom = lifted > 0 ? lifted + spacing.sm : insets.bottom + spacing.lg;
 
   const clear = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -82,15 +117,18 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ show, update }), [show, update]);
   return (
     <SnackbarContext.Provider value={value}>
-      {children}
+      <SnackbarInsetContext.Provider value={setInset}>
+        {children}
+      </SnackbarInsetContext.Provider>
       {current ? (
         <View
           pointerEvents="box-none"
+          testID="snackbar"
           style={{
             position: 'absolute',
             left: spacing.lg,
             right: spacing.lg,
-            bottom: insets.bottom + spacing.lg,
+            bottom,
             alignItems: 'center',
           }}
         >

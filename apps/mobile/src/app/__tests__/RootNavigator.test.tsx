@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {
   NavigationContainer,
@@ -13,6 +13,7 @@ import { createQueryClient } from '../../shared/api/queryClient';
 import { ApiProvider } from '../../shared/api/ApiProvider';
 import type { Http } from '../../shared/api/http';
 import { ThemeProvider } from '../../shared/ui/ThemeProvider';
+import { SnackbarProvider, useSnackbar } from '../../shared/ui/Snackbar';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { RootNavigator, OFFLINE_TEXT } from '../RootNavigator';
 import { MainTabs } from '../MainTabs';
@@ -208,7 +209,33 @@ it('tab labels grow with large system text only up to a limit, so they fit', asy
     for (const label of labels) {
       expect(label.props.maxFontSizeMultiplier).toBeLessThanOrEqual(1.3);
       expect(label.props.numberOfLines).toBe(1);
-      expect(StyleSheet.flatten(label.props.style).fontSize).toBeLessThanOrEqual(13);
+      expect(
+        StyleSheet.flatten(label.props.style).fontSize,
+      ).toBeLessThanOrEqual(13);
     }
   }
+});
+
+it('snackbars appear above the tab bar instead of covering it', async () => {
+  let snackbar!: ReturnType<typeof useSnackbar>;
+  function Grab() {
+    snackbar = useSnackbar();
+    return null;
+  }
+  await setup(
+    <SnackbarProvider>
+      <Grab />
+      <MainTabs />
+    </SnackbarProvider>,
+  );
+  await fireEvent(screen.getByTestId('tab-bar'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 576, width: 360, height: 64 } },
+  });
+  await act(async () => {
+    snackbar.show({ message: 'Revision 1 done' });
+  });
+  const { bottom } = StyleSheet.flatten(
+    screen.getByTestId('snackbar').props.style,
+  );
+  expect(bottom).toBeGreaterThanOrEqual(64);
 });

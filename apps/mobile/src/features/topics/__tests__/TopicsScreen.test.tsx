@@ -60,6 +60,40 @@ describe('TopicsScreen', () => {
     expect(screen.getByText('+ Add topic')).toBeOnTheScreen();
   });
 
+  it('labels the subject and exam filter rows', async () => {
+    await renderWithProviders(<TopicsScreen />, makeHttp([topic()]));
+    expect(await screen.findByText('All subjects')).toBeOnTheScreen();
+    expect(await screen.findByText('All exams')).toBeOnTheScreen();
+    expect(screen.getByText('Subject')).toBeOnTheScreen();
+    expect(screen.getByText('Exam')).toBeOnTheScreen();
+    expect(screen.queryByText('All')).toBeNull();
+  });
+
+  it('keeps the current list on screen while a new filter loads', async () => {
+    const http = makeHttp([topic()]);
+    const known = http.get.getMockImplementation() as (
+      p: string,
+      q?: unknown,
+    ) => unknown;
+    let release!: (v: unknown) => void;
+    http.get.mockImplementation((path: string, q?: { subjectId?: string }) =>
+      path === '/v1/topics' && q?.subjectId
+        ? new Promise(resolve => (release = resolve))
+        : known(path, q),
+    );
+    await renderWithProviders(<TopicsScreen />, http);
+    await screen.findByText('Hernia');
+    await fireEvent.press(await screen.findByText('Physiology'));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Updating list')).toBeOnTheScreen(),
+    );
+    expect(screen.getByText('Hernia')).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Loading')).toBeNull();
+    await act(async () => release([]));
+    expect(await screen.findByText('No matching topics')).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Updating list')).toBeNull();
+  });
+
   it('debounces search by 300 ms into q', async () => {
     const http = makeHttp([topic()]);
     const hasQ = () => http.get.mock.calls.some(c => c[1] && c[1].q === 'her');

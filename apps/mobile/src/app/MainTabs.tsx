@@ -1,6 +1,11 @@
-import React from 'react';
-import { StyleSheet, Text } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import {
+  BottomTabBar,
+  createBottomTabNavigator,
+  type BottomTabBarProps,
+} from '@react-navigation/bottom-tabs';
+import { useSnackbarInsetWhileFocused } from '../shared/ui/Snackbar';
 import { useTheme } from '../shared/ui/ThemeProvider';
 import { HomeScreen } from '../features/home/HomeScreen';
 import { ScheduleScreen } from '../features/schedule/ScheduleScreen';
@@ -95,8 +100,25 @@ const tabGlyph = (
 export function MainTabs() {
   useReminderSnapshotSync();
   const { colors } = useTheme();
+  // The tab bar reports its height so snackbars appear above it, not over it.
+  const [tabBarHeight, setTabBarHeight] = useState(0);
+  useSnackbarInsetWhileFocused('tabBar', tabBarHeight);
+  const onTabBarLayout = useCallback(
+    (e: LayoutChangeEvent) =>
+      setTabBarHeight(Math.round(e.nativeEvent.layout.height)),
+    [],
+  );
+  const renderTabBar = useCallback(
+    (props: BottomTabBarProps) => (
+      <View testID="tab-bar" onLayout={onTabBarLayout}>
+        <BottomTabBar {...props} />
+      </View>
+    ),
+    [onTabBarLayout],
+  );
   return (
     <Tab.Navigator
+      tabBar={renderTabBar}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.accent,

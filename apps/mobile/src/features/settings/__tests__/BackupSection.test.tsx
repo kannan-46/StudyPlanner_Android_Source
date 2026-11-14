@@ -153,3 +153,14 @@ it('never shows a raw error message when saving fails', async () => {
   expect(await screen.findByText("Couldn't save the backup file")).toBeTruthy();
   expect(screen.queryByText(/EACCES/)).toBeNull();
 });
+
+it('the import dialog says merge keeps settings and replace restores them', async () => {
+  await renderWithProviders(<BackupSection />, setup());
+  await fireEvent.press(screen.getByText('Import backup'));
+  expect(
+    await screen.findByText(/Your settings stay as they are/),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(/restores the reminder time and revision intervals/),
+  ).toBeTruthy();
+});

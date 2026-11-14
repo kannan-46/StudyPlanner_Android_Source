@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   SectionList,
@@ -17,6 +16,7 @@ import { Card } from '../../shared/ui/Card';
 import { ChipSelect } from '../../shared/ui/ChipSelect';
 import { EmptyState } from '../../shared/ui/EmptyState';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { useResponsive } from '../../shared/ui/responsive';
 import { Screen } from '../../shared/ui/Screen';
 import { useTheme } from '../../shared/ui/ThemeProvider';
@@ -109,16 +109,18 @@ export function ScheduleScreen() {
       }}
       keyboardShouldPersistTaps="handled"
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={refresh}
+          colors={[colors.accent]}
+          tintColor={colors.accent}
+          progressBackgroundColor={colors.surface}
+        />
       }
       ListHeaderComponent={header}
       ListEmptyComponent={
         agendaQ.isPending ? (
-          <ActivityIndicator
-            color={colors.accent}
-            accessibilityLabel="Loading"
-            style={{ marginTop: spacing.xl }}
-          />
+          <Loading />
         ) : agendaQ.error && !agendaQ.data ? (
           <ErrorRetry error={agendaQ.error} onRetry={() => agendaQ.refetch()} />
         ) : hiddenByFilter ? (

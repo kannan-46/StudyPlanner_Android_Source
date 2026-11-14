@@ -154,9 +154,13 @@ export function BackupSection() {
           </>
         }
       >
+        <Text style={{ color: colors.text, marginBottom: spacing.sm }}>
+          Merge adds the topics, exams, subjects and mock tests from the backup
+          to what you have. Your settings stay as they are.
+        </Text>
         <Text style={{ color: colors.text }}>
-          Merge adds the backup to what you have. Replace everything clears your
-          current data first.
+          Replace everything clears your current data first, then also restores
+          the reminder time and revision intervals from the backup.
         </Text>
       </Dialog>
       <Dialog

@@ -212,10 +212,60 @@ it('delete dialog cannot be dismissed while deleting', async () => {
   await waitFor(() => expect(signOut).toHaveBeenCalled());
 });
 
-it('sign out and navigation links work', async () => {
+it('failed interval save keeps the typed intervals', async () => {
+  const http = setup();
+  await renderWithProviders(<SettingsScreen />, http);
+  await fireEvent.changeText(
+    await screen.findByLabelText('Revision intervals (days)'),
+    '3, 7, 21, 45',
+  );
+  http.patch.mockRejectedValueOnce(new ApiError('NETWORK', 0));
+  await fireEvent.press(screen.getByText('Save intervals'));
+  expect(
+    await screen.findByText("Can't reach the server — try again"),
+  ).toBeTruthy();
+  expect(screen.getByDisplayValue('3, 7, 21, 45')).toBeTruthy();
+  expect(isDisabled('Save intervals')).toBe(false);
+});
+
+it('Save intervals shows a spinner while saving', async () => {
+  const http = setup();
+  let release: () => void = () => {};
+  http.patch.mockReturnValueOnce(new Promise(r => (release = () => r(user))));
+  await renderWithProviders(<SettingsScreen />, http);
+  await fireEvent.changeText(
+    await screen.findByLabelText('Revision intervals (days)'),
+    '2, 5, 9',
+  );
+  fireEvent.press(screen.getByText('Save intervals'));
+  expect(await screen.findByTestId('button-spinner')).toBeTruthy();
+  await act(async () => {
+    release();
+  });
+  await waitFor(() =>
+    expect(screen.queryByTestId('button-spinner')).toBeNull(),
+  );
+});
+
+it('sign out asks first, then signs out with feedback', async () => {
   await renderWithProviders(<SettingsScreen />, setup());
   await fireEvent.press(await screen.findByText('Sign out'));
-  expect(signOut).toHaveBeenCalled();
+  expect(await screen.findByText('Sign out?')).toBeTruthy();
+  expect(signOut).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByText('Cancel'));
+  await waitFor(() => expect(screen.queryByText('Sign out?')).toBeNull());
+  expect(signOut).not.toHaveBeenCalled();
+
+  await fireEvent.press(screen.getByText('Sign out'));
+  const all = await screen.findAllByText('Sign out');
+  await fireEvent.press(all[all.length - 1]);
+  await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText("You're signed out")).toBeTruthy();
+});
+
+it('navigation links work', async () => {
+  await renderWithProviders(<SettingsScreen />, setup());
+  await screen.findByText('Sign out');
   await fireEvent.press(screen.getByText('Reminder health'));
   expect(mockNavigate).toHaveBeenCalledWith('ReminderHealth');
   await fireEvent.press(screen.getByText('Manage exams & subjects'));

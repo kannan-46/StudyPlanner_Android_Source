@@ -237,10 +237,17 @@ export function createBackupService(deps: AppDeps) {
 
     if (mode === 'replace') await deleteStudyData(db, userId);
 
-    if (Object.keys(plan.settings).length > 0) {
-      await createUsersRepository(db).updateMe(userId, {
-        settings: plan.settings,
-      });
+    // Merge only adds study data and leaves the user's settings alone.
+    // Replace restores reminder and interval settings, but never the theme:
+    // that is a per-device look the user chose on this phone.
+    if (mode === 'replace') {
+      const restored = { ...plan.settings };
+      delete restored.theme;
+      if (Object.keys(restored).length > 0) {
+        await createUsersRepository(db).updateMe(userId, {
+          settings: restored,
+        });
+      }
     }
 
     const examsRepo = createExamsRepository(db);

@@ -31,6 +31,17 @@ export interface AuthContextValue {
   refreshUser(): Promise<void>;
 }
 
+/** How long the background server logout may take before we give up. */
+export const LOGOUT_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('timeout')), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
 // createHttp is built before the provider tree, so it reports an ended
 // session through this module-level bridge; the mounted AuthProvider listens.
 let sessionEndedHandler: (() => void) | null = null;
@@ -96,20 +107,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const localSignOut = useCallback(
     async (callLogout: boolean) => {
+      let refreshToken: string | undefined;
       if (callLogout) {
         try {
-          const tokens = await tokenStore.get();
-          if (tokens) await auth.logout(tokens.refreshToken);
+          refreshToken = (await tokenStore.get())?.refreshToken;
         } catch {
-          // best effort
+          // No readable token: nothing to revoke on the server.
         }
       }
+      // Sign out on the phone first, so it never waits for the network.
       await tokenStore.clear().catch(() => {});
       await clearReminders().catch(() => {});
       await signOutGoogle().catch(() => {});
       cachedUser.current = null;
       queryClient.clear();
       set({ status: 'signedOut' });
+      // Then tell the server, best effort and never awaited.
+      if (refreshToken) {
+        withTimeout(auth.logout(refreshToken), LOGOUT_TIMEOUT_MS).catch(
+          () => {},
+        );
+      }
     },
     [auth, queryClient, set],
   );

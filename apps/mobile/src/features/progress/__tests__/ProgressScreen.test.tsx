@@ -1,6 +1,12 @@
 import React from 'react';
 import { Alert, useWindowDimensions } from 'react-native';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import { ApiError } from '../../../shared/api/errors';
 import { ProgressScreen } from '../ProgressScreen';
 import {
@@ -82,10 +88,39 @@ describe('ProgressScreen', () => {
     expect(screen.getByText('11')).toBeOnTheScreen();
     expect(screen.getByText('Anatomy')).toBeOnTheScreen();
     expect(screen.getByText(/80\/100/)).toBeOnTheScreen();
-    expect(screen.getAllByTestId('stat-tile')).toHaveLength(5);
+    expect(screen.getAllByTestId('stat-tile')).toHaveLength(6);
     expect(tileWidth()).toBe('50%');
     await fireEvent.press(screen.getByText('Add mock test'));
     expect(mockNavigate).toHaveBeenCalledWith('MockTestForm');
+  });
+
+  it('labels each tile with what it counts, using the same units as Home', async () => {
+    mockDims(360);
+    await renderWithProviders(<ProgressScreen />, setup());
+    await screen.findByText('Mock A');
+    const valueOf = (label: string) => {
+      const tile = screen
+        .getAllByTestId('stat-tile')
+        .find(t => within(t).queryByText(label));
+      return tile
+        ? within(tile).getAllByText(/^[0-9]+$/)[0].props.children
+        : null;
+    };
+    expect(valueOf('Topics due today')).toBe(1);
+    expect(valueOf('Topics overdue')).toBe(3);
+    expect(valueOf('Revisions done')).toBe(11);
+    expect(valueOf('Revisions still to do')).toBe(9);
+    expect(valueOf('Topics in total')).toBe(7);
+    expect(valueOf('Topics completed')).toBe(2);
+    expect(screen.queryByText('Pending')).toBeNull();
+    expect(screen.queryByText('Overdue')).toBeNull();
+  });
+
+  it('opens a mock test for editing when it is tapped', async () => {
+    mockDims(360);
+    await renderWithProviders(<ProgressScreen />, setup());
+    await fireEvent.press(await screen.findByLabelText('Edit Mock A'));
+    expect(mockNavigate).toHaveBeenCalledWith('MockTestForm', { id: ID(50) });
   });
 
   it('uses 4 tiles per row at 1000 dp', async () => {
@@ -152,12 +187,13 @@ describe('ProgressScreen', () => {
     await confirmDeleteOf(alert);
     await waitFor(() => expect(http.del).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByLabelText('Deleting')).toBeNull());
-    expect(screen.queryByText("Couldn't delete — try again")).toBeNull();
+    expect(screen.queryByText("Can't reach the server — try again")).toBeNull();
 
     http.del.mockRejectedValueOnce(new ApiError('NETWORK', 0));
     await confirmDeleteOf(alert);
+    // The same plain message every other screen uses for a lost connection.
     expect(
-      await screen.findByText("Couldn't delete — try again"),
+      await screen.findByText("Can't reach the server — try again"),
     ).toBeOnTheScreen();
   });
 });

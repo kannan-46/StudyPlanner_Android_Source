@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import type {
   TopicCreateInput,
   TopicListQuery,
@@ -8,11 +13,18 @@ import { useApi } from '../../shared/api/ApiProvider';
 import { queryKeys } from '../../shared/api/queryClient';
 import { invalidateTopicData } from '../../shared/api/invalidate';
 
-export function useTopics(query: TopicListQuery = {}) {
+export function useTopics(
+  query: TopicListQuery = {},
+  opts: {
+    /** Keep showing the last list while a changed search/filter loads. */
+    keepPrevious?: boolean;
+  } = {},
+) {
   const { topics } = useApi();
   return useQuery({
     queryKey: queryKeys.topics(query),
     queryFn: () => topics.list(query),
+    placeholderData: opts.keepPrevious ? keepPreviousData : undefined,
   });
 }
 

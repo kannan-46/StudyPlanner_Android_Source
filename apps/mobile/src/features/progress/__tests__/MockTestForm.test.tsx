@@ -108,6 +108,46 @@ describe('MockTestForm', () => {
     });
   });
 
+  it('edits an existing test: starts with its values and saves only the changes', async () => {
+    const http = makeHttp();
+    http.patch.mockResolvedValue({ id: ID(50) });
+    const onSaved = jest.fn();
+    const onDirtyChange = jest.fn();
+    await renderWithProviders(
+      <MockTestForm
+        initial={{
+          id: ID(50),
+          title: 'Mock A',
+          takenOn: '2026-11-01',
+          score: 7,
+          maxScore: 100,
+          percent: 7,
+          examId: ID(11),
+          notes: 'Kept as is',
+        }}
+        onSaved={onSaved}
+        onDirtyChange={onDirtyChange}
+      />,
+      http,
+    );
+    expect(screen.getByLabelText('Title').props.value).toBe('Mock A');
+    expect(screen.getByLabelText('Score').props.value).toBe('7');
+    expect(screen.getByLabelText('Max score').props.value).toBe('100');
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    await fireEvent.changeText(screen.getByLabelText('Score'), '70');
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    await fireEvent.press(screen.getByText('Save changes'));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(http.post).not.toHaveBeenCalled();
+    expect(http.patch).toHaveBeenCalledWith(`/v1/mock-tests/${ID(50)}`, {
+      title: 'Mock A',
+      takenOn: '2026-11-01',
+      score: 70,
+      maxScore: 100,
+      examId: ID(11),
+    });
+  });
+
   it('accepts a decimal comma in score fields', async () => {
     const http = makeHttp();
     http.post.mockResolvedValue({ id: ID(5) });

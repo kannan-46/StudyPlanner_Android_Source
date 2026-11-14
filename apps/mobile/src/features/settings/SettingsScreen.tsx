@@ -1,12 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { Platform, Pressable, Switch, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -22,6 +15,7 @@ import { Card } from '../../shared/ui/Card';
 import { ChipSelect } from '../../shared/ui/ChipSelect';
 import { Dialog } from '../../shared/ui/Dialog';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { Loading } from '../../shared/ui/Loading';
 import { Screen } from '../../shared/ui/Screen';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { TextField } from '../../shared/ui/TextField';
@@ -112,6 +106,8 @@ export function SettingsScreen() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [savingIntervals, setSavingIntervals] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   const settings = meQ.data?.settings ?? DEFAULT_SETTINGS;
   const intervalsSaved = settings.intervals.join(', ');
@@ -144,8 +140,17 @@ export function SettingsScreen() {
 
   async function saveIntervals() {
     if (!parsed.value) return;
-    await save({ settings: { intervals: parsed.value } });
-    setIntervalsText(null);
+    setSavingIntervals(true);
+    const ok = await save({ settings: { intervals: parsed.value } });
+    setSavingIntervals(false);
+    // On failure keep what the user typed, so Save can simply be tapped again.
+    if (ok) setIntervalsText(null);
+  }
+
+  async function confirmSignOut() {
+    setSignOutOpen(false);
+    await signOut();
+    snackbar.show({ message: "You're signed out" });
   }
 
   async function saveReminder(nextEnabled: boolean, nextTime: string) {
@@ -182,7 +187,7 @@ export function SettingsScreen() {
   if (meQ.isLoading) {
     return (
       <Screen scroll>
-        <ActivityIndicator accessibilityLabel="Loading" />
+        <Loading />
       </Screen>
     );
   }
@@ -223,6 +228,7 @@ export function SettingsScreen() {
         <Button
           title="Save intervals"
           onPress={saveIntervals}
+          loading={savingIntervals}
           disabled={!intervalsDirty || updateMe.isPending}
         />
         <LinkRow
@@ -310,7 +316,11 @@ export function SettingsScreen() {
 
       <Section title="Account">
         <Text style={{ color: colors.text }}>{meQ.data?.email ?? ''}</Text>
-        <Button title="Sign out" variant="secondary" onPress={signOut} />
+        <Button
+          title="Sign out"
+          variant="secondary"
+          onPress={() => setSignOutOpen(true)}
+        />
         <Button
           title="Delete account"
           variant="danger"
@@ -320,6 +330,26 @@ export function SettingsScreen() {
           }}
         />
       </Section>
+
+      <Dialog
+        visible={signOutOpen}
+        title="Sign out?"
+        onRequestClose={() => setSignOutOpen(false)}
+        actions={
+          <>
+            <Button title="Sign out" onPress={confirmSignOut} />
+            <Button
+              title="Cancel"
+              variant="text"
+              onPress={() => setSignOutOpen(false)}
+            />
+          </>
+        }
+      >
+        <Text style={{ color: colors.text }}>
+          Your topics stay saved. You can sign in again with Google at any time.
+        </Text>
+      </Dialog>
 
       <Dialog
         visible={deleteOpen}
