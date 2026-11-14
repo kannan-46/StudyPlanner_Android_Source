@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -106,6 +106,8 @@ export function SettingsScreen() {
   const [intervalsText, setIntervalsText] = useState<string | null>(null);
   const [enabledOv, setEnabledOv] = useState<boolean | null>(null);
   const [timeOv, setTimeOv] = useState<string | null>(null);
+  // Counts reminder saves, so quick taps are settled by the latest one only.
+  const reminderSaveId = useRef(0);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
@@ -147,9 +149,12 @@ export function SettingsScreen() {
   }
 
   async function saveReminder(nextEnabled: boolean, nextTime: string) {
+    const id = ++reminderSaveId.current;
     const ok = await save({
       settings: { dailyReminder: nextEnabled, reminderTime: nextTime },
     });
+    // A newer tap is still saving: keep showing it, and let it finish the job.
+    if (id !== reminderSaveId.current) return;
     if (ok) {
       try {
         await configureReminders(nextEnabled, nextTime);

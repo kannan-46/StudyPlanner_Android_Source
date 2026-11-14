@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
+import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import App from '../../../App';
 import { darkColors } from '../../shared/ui/theme';
@@ -38,4 +39,13 @@ it('draws nothing until the saved theme is read, then starts in it', async () =>
   expect(screen.getByText('Study Planner')).toHaveStyle({
     color: darkColors.text,
   });
+});
+
+it('copies the saved theme to the native side so the next launch opens in it', async () => {
+  const setThemeMode = NativeModules.AppConfig.setThemeMode as jest.Mock;
+  setThemeMode.mockClear();
+  await AsyncStorage.setItem('prefs.theme', 'light');
+  await render(<App />);
+  await screen.findByText('Continue with Google');
+  expect(setThemeMode).toHaveBeenCalledWith('light');
 });

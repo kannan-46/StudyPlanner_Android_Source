@@ -89,6 +89,8 @@ async function setup(child: React.ReactNode = <RootNavigator />) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Screens stay loading, so no data arrives after a test has finished.
+  (http.get as jest.Mock).mockReturnValue(new Promise(() => {}));
   mockDims(360);
   mockedNetInfo.mockReturnValue(jest.fn());
   mockedAuth.mockReturnValue({
@@ -185,6 +187,28 @@ it('tab glyphs keep a fixed size with large system text', async () => {
       // Sized from the tab bar's icon box, not from the system text size.
       expect(lineHeight).toBeLessThanOrEqual(25);
       expect(fontSize).toBeLessThan(lineHeight);
+    }
+  }
+});
+
+it('tab labels grow with large system text only up to a limit, so they fit', async () => {
+  (useWindowDimensions as jest.Mock).mockReturnValue({
+    width: 360,
+    height: 800,
+    scale: 2,
+    fontScale: 2,
+  });
+  (http.get as jest.Mock).mockReturnValue(new Promise(() => {}));
+  await setup(<MainTabs />);
+  for (const name of ['Home', 'Schedule', 'Topics', 'Progress', 'Settings']) {
+    const labels = screen
+      .getAllByText(name)
+      .filter(t => t.props.maxFontSizeMultiplier !== undefined);
+    expect(labels.length).toBeGreaterThan(0);
+    for (const label of labels) {
+      expect(label.props.maxFontSizeMultiplier).toBeLessThanOrEqual(1.3);
+      expect(label.props.numberOfLines).toBe(1);
+      expect(StyleSheet.flatten(label.props.style).fontSize).toBeLessThanOrEqual(13);
     }
   }
 });

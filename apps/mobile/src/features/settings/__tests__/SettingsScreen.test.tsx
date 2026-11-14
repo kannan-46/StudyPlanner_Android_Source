@@ -127,6 +127,36 @@ it('reminder switch saves and reconfigures; failure reverts with a snackbar', as
   );
 });
 
+it('quick off/on taps on the reminder switch end on the last tap', async () => {
+  const http = setup();
+  const replies: Array<() => void> = [];
+  const real = http.patch.getMockImplementation()!;
+  http.patch.mockImplementation(
+    (p: string, body: any) =>
+      new Promise(resolve => {
+        replies.push(() => resolve(real(p, body)));
+      }),
+  );
+  await renderWithProviders(<SettingsScreen />, http);
+  const sw = () => screen.getByLabelText('Daily reminder');
+  await screen.findByLabelText('Daily reminder');
+  await fireEvent(sw(), 'valueChange', false);
+  await fireEvent(sw(), 'valueChange', true);
+  await waitFor(() => expect(replies).toHaveLength(2));
+
+  // The first save finishing must not flip the switch back to off.
+  await act(async () => replies[0]());
+  expect(sw().props.value).toBe(true);
+  expect(configureReminders).not.toHaveBeenCalled();
+
+  await act(async () => replies[1]());
+  await waitFor(() =>
+    expect(configureReminders).toHaveBeenCalledWith(true, '08:00'),
+  );
+  expect(configureReminders).toHaveBeenCalledTimes(1);
+  expect(sw().props.value).toBe(true);
+});
+
 it('theme chips apply the local theme at once, without waiting for the server', async () => {
   const http = setup();
   await renderWithProviders(<SettingsScreen />, http);

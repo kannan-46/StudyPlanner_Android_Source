@@ -7,7 +7,16 @@ export type ThemeSyncDeps = {
   persistSynced(mode: ThemeMode | null): void;
   /** Saves the theme on the server; resolves with the server's theme. */
   send(mode: ThemeMode): Promise<ThemeMode>;
+  /** Asks the server for a fresh copy (fed back through observeServer). */
+  recheck?(): void;
 };
+
+/**
+ * After a save, a reply to another settings save that was handled by the
+ * server earlier can still arrive with the old theme. For this long such a
+ * value is not trusted; a fresh copy is fetched once the time is up instead.
+ */
+export const QUIET_AFTER_SAVE_MS = 5000;
 
 export type ThemeSync = {
   readonly mode: ThemeMode;
@@ -32,6 +41,16 @@ export function createThemeSync(
   let synced: ThemeMode | null = initial.synced;
   let signedIn = false;
   let inFlight = false;
+  let quietUntil = 0;
+  let recheckTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const scheduleRecheck = () => {
+    if (recheckTimer || !deps.recheck) return;
+    recheckTimer = setTimeout(() => {
+      recheckTimer = undefined;
+      if (signedIn) deps.recheck?.();
+    }, Math.max(0, quietUntil - Date.now()));
+  };
 
   const setLocal = (mode: ThemeMode) => {
     if (mode === local) return;
@@ -52,6 +71,7 @@ export function createThemeSync(
     let ok = false;
     try {
       setSynced(await deps.send(local));
+      quietUntil = Date.now() + QUIET_AFTER_SAVE_MS;
       ok = true;
     } catch {
       // Keep the local choice; it is sent again on the next server reply.
@@ -73,6 +93,12 @@ export function createThemeSync(
       // A reply that left before our save landed says nothing new.
       if (inFlight) return;
       if (theme !== synced) {
+        // Possibly an older reply that left before our save landed: check
+        // again with a fresh copy once the quiet time is over.
+        if (Date.now() < quietUntil) {
+          scheduleRecheck();
+          return;
+        }
         setSynced(theme);
         setLocal(theme);
         return;

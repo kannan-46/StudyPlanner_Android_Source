@@ -6,7 +6,7 @@ import { ApiProvider } from '../shared/api/ApiProvider';
 import { createHttp } from '../shared/api/http';
 import { createQueryClient } from '../shared/api/queryClient';
 import { tokenStore } from '../shared/api/tokenStore';
-import { API_BASE_URL } from '../native/config';
+import { API_BASE_URL, setNativeThemeMode } from '../native/config';
 import {
   AuthProvider,
   notifySessionEnded,
@@ -61,6 +61,8 @@ export function AppProviders() {
   useEffect(() => {
     let live = true;
     loadThemePrefs().then(p => {
+      // Refresh the native copy too (covers choices saved by older versions).
+      if (p.mode) setNativeThemeMode(p.mode);
       if (live) setThemePrefs(p);
     });
     return () => {

@@ -18,6 +18,7 @@ jest.mock('@react-native-community/netinfo', () =>
 NativeModules.AppConfig = {
   API_BASE_URL: 'https://api.test/api/server',
   GOOGLE_WEB_CLIENT_ID: '',
+  setThemeMode: jest.fn(),
 };
 NativeModules.GoogleAuth = { signIn: jest.fn(), signOut: jest.fn() };
 NativeModules.Reminders = {

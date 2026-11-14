@@ -29,6 +29,7 @@ import {
   navigationTheme,
   useServerThemeSync,
 } from '../AppTheme';
+import { QUIET_AFTER_SAVE_MS } from '../themeSync';
 
 jest.mock('../../shared/api/tokenStore', () => ({
   tokenStore: { get: jest.fn(), set: jest.fn(), clear: jest.fn() },
@@ -245,4 +246,32 @@ it('a fresh /v1/me from another screen that shows a change made elsewhere is app
   });
   expect(shown()).toBe('dark:dark');
   expect(http.patch).not.toHaveBeenCalled();
+});
+
+it('a late reply from another settings save does not undo a theme just saved', async () => {
+  jest.useFakeTimers();
+  try {
+    http.get.mockResolvedValue(userWith('dark'));
+    http.patch.mockImplementation(async () => userWith('light'));
+    await setup({ mode: 'dark', synced: 'dark' });
+    await waitFor(() => expect(http.get).toHaveBeenCalledTimes(1));
+    await fireEvent.press(screen.getByText('pick-light'));
+    await waitFor(async () =>
+      expect((await loadThemePrefs()).synced).toBe('light'),
+    );
+    // The reminder save's reply, handled by the server before the theme.
+    await act(async () => {
+      qc!.setQueryData(['me'], userWith('dark'));
+    });
+    expect(shown()).toBe('light:light');
+    // Once the quiet time is over a fresh copy is fetched and agrees.
+    http.get.mockResolvedValue(userWith('light'));
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(QUIET_AFTER_SAVE_MS);
+    });
+    await waitFor(() => expect(http.get).toHaveBeenCalledTimes(2));
+    expect(shown()).toBe('light:light');
+  } finally {
+    jest.useRealTimers();
+  }
 });

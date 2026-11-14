@@ -1,0 +1,4 @@
+<resources>
+    <!-- Matches the app's dark palette (background). -->
+    <color name="app_background">#101A20</color>
+</resources>

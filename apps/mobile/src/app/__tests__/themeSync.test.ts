@@ -1,5 +1,5 @@
 import type { ThemeMode, ThemePrefs } from '../../shared/lib/localPrefs';
-import { createThemeSync } from '../themeSync';
+import { QUIET_AFTER_SAVE_MS, createThemeSync } from '../themeSync';
 
 type Deferred = {
   mode: ThemeMode;
@@ -19,6 +19,7 @@ function setup(initial: ThemePrefs = { mode: null, synced: null }) {
           sends.push({ mode, resolve, reject });
         }),
     ),
+    recheck: jest.fn(),
   };
   const sync = createThemeSync(initial, deps);
   return { sync, deps, sends };
@@ -130,4 +131,53 @@ it('signing out forgets the server copy, so the next account’s theme is used',
   expect(deps.send).not.toHaveBeenCalled();
   sync.observeServer('light');
   expect(sync.mode).toBe('light');
+});
+
+describe('just after a save', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('an older reply from another settings save does not undo the theme', async () => {
+    const { sync, deps, sends } = setup({ mode: 'dark', synced: 'dark' });
+    sync.setAuthStatus('signedIn');
+    sync.choose('light');
+    sends[0].resolve('light');
+    await jest.advanceTimersByTimeAsync(0);
+    // e.g. the reminder save's reply, handled by the server before ours.
+    sync.observeServer('dark');
+    expect(sync.mode).toBe('light');
+    expect(deps.apply).not.toHaveBeenCalledWith('dark');
+    expect(deps.recheck).not.toHaveBeenCalled();
+    // A fresh copy is asked for once the quiet time is over.
+    await jest.advanceTimersByTimeAsync(QUIET_AFTER_SAVE_MS);
+    expect(deps.recheck).toHaveBeenCalledTimes(1);
+    sync.observeServer('light');
+    expect(sync.mode).toBe('light');
+  });
+
+  it('a real change made elsewhere still wins after the quiet time', async () => {
+    const { sync, sends } = setup({ mode: 'dark', synced: 'dark' });
+    sync.setAuthStatus('signedIn');
+    sync.choose('light');
+    sends[0].resolve('light');
+    await jest.advanceTimersByTimeAsync(0);
+    sync.observeServer('system');
+    expect(sync.mode).toBe('light');
+    await jest.advanceTimersByTimeAsync(QUIET_AFTER_SAVE_MS);
+    // The fresh copy still says System: it was changed on another device.
+    sync.observeServer('system');
+    expect(sync.mode).toBe('system');
+  });
+
+  it('does not ask for a fresh copy after signing out', async () => {
+    const { sync, deps, sends } = setup({ mode: 'dark', synced: 'dark' });
+    sync.setAuthStatus('signedIn');
+    sync.choose('light');
+    sends[0].resolve('light');
+    await jest.advanceTimersByTimeAsync(0);
+    sync.observeServer('dark');
+    sync.setAuthStatus('signedOut');
+    await jest.advanceTimersByTimeAsync(QUIET_AFTER_SAVE_MS);
+    expect(deps.recheck).not.toHaveBeenCalled();
+  });
 });

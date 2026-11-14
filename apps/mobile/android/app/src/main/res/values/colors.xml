@@ -1,0 +1,4 @@
+<resources>
+    <!-- Matches the app's light palette (background). -->
+    <color name="app_background">#F3F7FA</color>
+</resources>

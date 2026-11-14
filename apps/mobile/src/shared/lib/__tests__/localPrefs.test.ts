@@ -1,3 +1,4 @@
+import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadThemePrefs, saveSyncedTheme, saveThemeMode } from '../localPrefs';
 
@@ -16,6 +17,22 @@ it('round-trips the theme and the synced value', async () => {
   expect(await loadThemePrefs()).toEqual({ mode: 'dark', synced: 'light' });
   await saveSyncedTheme(null);
   expect(await loadThemePrefs()).toEqual({ mode: 'dark', synced: null });
+});
+
+it('saving a theme also gives the native side a copy for the next launch', async () => {
+  await saveThemeMode('light');
+  expect(NativeModules.AppConfig.setThemeMode).toHaveBeenCalledWith('light');
+  expect(await AsyncStorage.getItem('prefs.theme')).toBe('light');
+});
+
+it('a native failure does not stop the theme being saved', async () => {
+  (NativeModules.AppConfig.setThemeMode as jest.Mock).mockImplementationOnce(
+    () => {
+      throw new Error('x');
+    },
+  );
+  await expect(saveThemeMode('dark')).resolves.toBeUndefined();
+  expect(await AsyncStorage.getItem('prefs.theme')).toBe('dark');
 });
 
 it('ignores unknown stored values', async () => {

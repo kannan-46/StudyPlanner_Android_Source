@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setNativeThemeMode } from '../../native/config';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -45,6 +46,8 @@ export async function loadThemePrefs(): Promise<ThemePrefs> {
 }
 
 export async function saveThemeMode(mode: ThemeMode): Promise<void> {
+  // Native copy, read by the Android activity before its first frame.
+  setNativeThemeMode(mode);
   try {
     await AsyncStorage.setItem(KEY_MODE, mode);
   } catch {

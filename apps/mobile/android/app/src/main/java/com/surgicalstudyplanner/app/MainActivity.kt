@@ -1,9 +1,13 @@
 package com.surgicalstudyplanner.app
 
+import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.surgicalstudyplanner.app.reminders.ReminderNotifications
 import com.facebook.react.ReactActivity
@@ -12,6 +16,17 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 class MainActivity : ReactActivity() {
+
+  /**
+   * Applies the theme saved by the app (AppConfig.setThemeMode) before the
+   * window exists, so the window, system bars and first frame are already in
+   * the user's theme instead of the phone's dark mode. AppCompat applies the
+   * night mode while the base context is attached, so it is set just before.
+   */
+  override fun attachBaseContext(newBase: Context) {
+    AppCompatDelegate.setDefaultNightMode(ThemePrefs.nightMode(newBase))
+    super.attachBaseContext(newBase)
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -38,6 +53,12 @@ class MainActivity : ReactActivity() {
     }
     WindowInsetsControllerCompat(window, window.decorView)
         .isAppearanceLightNavigationBars = !isDark
+    // The activity is not recreated, so the window keeps the background of
+    // the old theme wherever it shows through unless it is refreshed here.
+    window.setBackgroundDrawable(
+        ColorDrawable(
+            ContextCompat.getColor(
+                createConfigurationContext(newConfig), R.color.app_background)))
   }
 
   /**

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../shared/ui/ThemeProvider';
 import { HomeScreen } from '../features/home/HomeScreen';
@@ -52,6 +52,40 @@ export const TabGlyph = ({
   </Text>
 );
 
+/**
+ * Tab labels grow with the phone's text size, but only up to
+ * TAB_LABEL_MAX_SCALE, so they still fit inside the fixed-height tab bar.
+ */
+export const TAB_LABEL_MAX_SCALE = 1.3;
+
+export const TabLabel = ({
+  children,
+  color,
+  position,
+}: {
+  children: string;
+  color: string;
+  position: 'beside-icon' | 'below-icon';
+}) => (
+  <Text
+    numberOfLines={1}
+    maxFontSizeMultiplier={TAB_LABEL_MAX_SCALE}
+    style={[
+      styles.label,
+      position === 'beside-icon' ? styles.labelBeside : styles.labelBelow,
+      { color },
+    ]}
+  >
+    {children}
+  </Text>
+);
+
+const styles = StyleSheet.create({
+  label: { fontWeight: '500', textAlign: 'center' },
+  labelBeside: { fontSize: 13, marginStart: 5 },
+  labelBelow: { fontSize: 10 },
+});
+
 const tabGlyph = (
   name: keyof MainTabParamList,
   color: string,
@@ -72,6 +106,7 @@ export function MainTabs() {
           borderTopColor: colors.line,
         },
         tabBarIcon: ({ color, size }) => tabGlyph(route.name, color, size),
+        tabBarLabel: TabLabel,
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />

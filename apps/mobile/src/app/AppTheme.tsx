@@ -80,6 +80,15 @@ export function AppThemeProvider({
         qc.setQueryData(queryKeys.me, user);
         return user.settings.theme;
       },
+      recheck: () => {
+        qc.fetchQuery({
+          queryKey: queryKeys.me,
+          queryFn: () => apiRef.current.me.get(),
+          staleTime: 0,
+        }).catch(() => {
+          // Offline: the next /v1/me load is checked as usual.
+        });
+      },
     });
   }
   const sync = syncRef.current;
