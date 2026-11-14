@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AgendaItem } from '@planner/shared';
 import type { RootStackParamList } from '../../app/RootNavigator';
+import { useLocalToday } from '../../shared/lib/useLocalToday';
 import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { Card } from '../../shared/ui/Card';
 import { ChipSelect } from '../../shared/ui/ChipSelect';
@@ -38,7 +39,8 @@ export function ScheduleScreen() {
   const { size } = useResponsive();
   const expanded = size === 'expanded';
 
-  const agendaQ = useAgenda(30);
+  const today = useLocalToday();
+  const agendaQ = useAgenda(30, today);
   const examsQ = useExams();
   const topicsQ = useTopics({ status: 'active' });
   useRefetchOnFocus(
@@ -80,6 +82,8 @@ export function ScheduleScreen() {
   };
 
   const exams = examsQ.data ?? [];
+  const examName = exams.find(e => e.id === examId)?.name;
+  const hiddenByFilter = examId !== '' && (agendaQ.data?.length ?? 0) > 0;
   const header =
     exams.length > 0 ? (
       <View style={{ marginBottom: spacing.sm }}>
@@ -117,6 +121,13 @@ export function ScheduleScreen() {
           />
         ) : agendaQ.error && !agendaQ.data ? (
           <ErrorRetry error={agendaQ.error} onRetry={() => agendaQ.refetch()} />
+        ) : hiddenByFilter ? (
+          <EmptyState
+            title={`Nothing due for ${examName ?? 'this exam'}`}
+            body="Revisions for your other exams are under All."
+            actionLabel="Show all"
+            onAction={() => setExamId('')}
+          />
         ) : (
           <EmptyState title="Nothing due — add topics or enjoy the break" />
         )
@@ -134,11 +145,33 @@ export function ScheduleScreen() {
           {section.title}
         </Text>
       )}
-      renderItem={({ item }) => (
-        <Card style={{ marginBottom: spacing.sm, paddingVertical: spacing.sm }}>
-          <AgendaRow item={item} onOpenTopic={open} />
-        </Card>
-      )}
+      extraData={selectedId}
+      renderItem={({ item }) => {
+        const selected = expanded && item.topicId === selectedId;
+        return (
+          <View
+            testID={`schedule-row-${item.topicId}`}
+            accessibilityState={expanded ? { selected } : undefined}
+          >
+            <Card
+              style={[
+                { marginBottom: spacing.sm, paddingVertical: spacing.sm },
+                // Tablet: the open topic is highlighted; every row keeps the
+                // same border width so nothing shifts when it changes.
+                expanded && {
+                  borderWidth: 2,
+                  borderColor: selected ? colors.accent : colors.line,
+                  backgroundColor: selected
+                    ? colors.softAccent
+                    : colors.surface,
+                },
+              ]}
+            >
+              <AgendaRow item={item} onOpenTopic={open} today={today} />
+            </Card>
+          </View>
+        );
+      }}
     />
   );
 

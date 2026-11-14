@@ -19,8 +19,20 @@ export type SnackbarOptions = {
   durationMs?: number;
 };
 
-type Ctx = { show: (o: SnackbarOptions) => void };
-const SnackbarContext = createContext<Ctx>({ show: () => {} });
+type Ctx = {
+  /** Shows a snackbar (replacing any other) and returns its id. */
+  show: (o: SnackbarOptions) => number;
+  /**
+   * Replaces snackbar `id` with `o` and restarts its timer, as long as no
+   * other snackbar was shown since (it shows again if it already timed out).
+   * Returns false, and does nothing, when another snackbar took its place.
+   */
+  update: (id: number, o: SnackbarOptions) => boolean;
+};
+const SnackbarContext = createContext<Ctx>({
+  show: () => 0,
+  update: () => false,
+});
 
 export function useSnackbar(): Ctx {
   return useContext(SnackbarContext);
@@ -31,6 +43,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
   const insets = useSafeAreaInsets();
   const [current, setCurrent] = useState<SnackbarOptions | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastId = useRef(0);
 
   const clear = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -40,7 +53,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
     clear();
     setCurrent(null);
   }, []);
-  const show = useCallback((o: SnackbarOptions) => {
+  const display = useCallback((o: SnackbarOptions) => {
     clear();
     setCurrent(o);
     timer.current = setTimeout(() => {
@@ -48,9 +61,25 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
       setCurrent(null);
     }, o.durationMs ?? 5000);
   }, []);
+  const show = useCallback(
+    (o: SnackbarOptions) => {
+      lastId.current += 1;
+      display(o);
+      return lastId.current;
+    },
+    [display],
+  );
+  const update = useCallback(
+    (id: number, o: SnackbarOptions) => {
+      if (id !== lastId.current) return false;
+      display(o);
+      return true;
+    },
+    [display],
+  );
   useEffect(() => clear, []);
 
-  const value = useMemo(() => ({ show }), [show]);
+  const value = useMemo(() => ({ show, update }), [show, update]);
   return (
     <SnackbarContext.Provider value={value}>
       {children}

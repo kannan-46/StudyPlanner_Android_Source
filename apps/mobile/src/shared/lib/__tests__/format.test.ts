@@ -1,4 +1,4 @@
-import { formatClockTime, formatDate, relativeDay } from '../format';
+import { dueStatus, formatClockTime, formatDate, relativeDay } from '../format';
 
 describe('format', () => {
   it('relativeDay', () => {
@@ -31,5 +31,22 @@ describe('formatClockTime', () => {
 
   it('returns anything unexpected unchanged', () => {
     expect(formatClockTime('soon', false)).toBe('soon');
+  });
+});
+
+describe('dueStatus', () => {
+  const today = '2026-11-14';
+  it('words overdue, today, tomorrow and later dates plainly', () => {
+    expect(dueStatus('2026-11-11', today)).toEqual({
+      text: 'Overdue by 3 days',
+      overdue: true,
+    });
+    expect(dueStatus('2026-11-13', today).text).toBe('Overdue by 1 day');
+    expect(dueStatus(today, today)).toEqual({
+      text: 'Due today',
+      overdue: false,
+    });
+    expect(dueStatus('2026-11-15', today).text).toBe('Due tomorrow');
+    expect(dueStatus('2026-11-18', today).text).toBe('In 4 days, 18 Nov');
   });
 });

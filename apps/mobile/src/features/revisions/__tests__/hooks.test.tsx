@@ -6,7 +6,7 @@ import { createQueryClient, queryKeys } from '../../../shared/api/queryClient';
 import { ApiProvider } from '../../../shared/api/ApiProvider';
 import type { Http } from '../../../shared/api/http';
 import { ApiError } from '../../../shared/api/errors';
-import { useCompleteRevision } from '../hooks';
+import { useCompleteRevision, useUndoRevision } from '../hooks';
 
 const topic: TopicView = {
   id: 't1',
@@ -130,5 +130,64 @@ describe('useCompleteRevision', () => {
         qc.getQueryData<AgendaItem[]>(queryKeys.agenda(today, days)),
       ).toEqual([agendaItem]);
     }
+  });
+});
+
+describe('useUndoRevision', () => {
+  it('restores the revision in the topic at once', async () => {
+    const gate = deferred<unknown>();
+    const post = jest.fn(() => gate.promise);
+    const { qc, wrapper } = setup(post);
+    const doneTopic: TopicView = {
+      ...topic,
+      revisions: [
+        { ...topic.revisions[0]!, doneOn: '2026-11-13' },
+        topic.revisions[1]!,
+      ],
+    };
+    qc.setQueryData(queryKeys.topic('t1'), doneTopic);
+    const { result, unmount } = await renderHook(() => useUndoRevision('t1'), {
+      wrapper,
+    });
+    cleanups.push(unmount, () => gate.resolve({}));
+    await act(async () => {
+      result.current.mutate({ topicId: 't1', revisionId: 'R1' });
+    });
+    await waitFor(() => {
+      const t = qc.getQueryData<TopicView>(queryKeys.topic('t1'));
+      expect(t?.revisions[0]?.doneOn).toBeNull();
+    });
+  });
+
+  it('waits for a Done on the same topic before sending', async () => {
+    const gate = deferred<unknown>();
+    const post = jest
+      .fn()
+      .mockImplementationOnce(() => gate.promise)
+      .mockResolvedValue({});
+    const { wrapper } = setup(post);
+    const { result, unmount } = await renderHook(
+      () => ({
+        complete: useCompleteRevision('t1'),
+        undo: useUndoRevision('t1'),
+      }),
+      { wrapper },
+    );
+    cleanups.push(unmount, () => gate.resolve({}));
+    await act(async () => {
+      result.current.complete.mutate({
+        topicId: 't1',
+        revisionId: 'R1',
+        doneOn: '2026-11-13',
+      });
+    });
+    await act(async () => {
+      result.current.undo.mutate({ topicId: 't1', revisionId: 'R1' });
+    });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]![0]).toMatch(/complete$/);
+    await act(async () => gate.resolve({}));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls[1]![0]).toMatch(/undo$/);
   });
 });

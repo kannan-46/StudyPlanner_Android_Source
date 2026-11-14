@@ -1,10 +1,17 @@
 import React, { type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { addDays, localToday, type RevisionView } from '@planner/shared';
+import {
+  addDays,
+  localToday,
+  maxDate,
+  type LocalDate,
+  type RevisionView,
+  type TopicView,
+} from '@planner/shared';
 import { ApiError, userMessage } from '../../shared/api/errors';
 import { invalidateTopicData } from '../../shared/api/invalidate';
-import { formatDate } from '../../shared/lib/format';
+import { dueStatus, formatDate } from '../../shared/lib/format';
 import { Button } from '../../shared/ui/Button';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
@@ -23,7 +30,14 @@ export type RevisionRowProps = {
   total: number;
   /** Makes the topic name a link (Schedule and Home). */
   onOpenTopic?: () => void;
+  /** The local date the row's status is worded against; defaults to now. */
+  today?: LocalDate;
 };
+
+/** Errors worth trying again: no connection or a server-side failure. */
+function canRetry(e: unknown): boolean {
+  return !(e instanceof ApiError) || e.code === 'NETWORK' || e.status >= 500;
+}
 
 export function RevisionRow({
   topicId,
@@ -33,65 +47,73 @@ export function RevisionRow({
   isLastDone,
   total,
   onOpenTopic,
+  today: todayProp,
 }: RevisionRowProps) {
   const { colors, spacing } = useTheme();
   const snackbar = useSnackbar();
   const qc = useQueryClient();
-  const complete = useCompleteRevision();
-  const undo = useUndoRevision();
-  const snooze = useSnoozeRevision();
+  const complete = useCompleteRevision(topicId);
+  const undo = useUndoRevision(topicId);
+  const snooze = useSnoozeRevision(topicId);
 
+  const today = todayProp ?? localToday();
   const done = revision.doneOn !== null;
   const due = revision.dueOverride ?? revision.dueOn;
-  const date = done
-    ? `✓ ${formatDate(revision.doneOn as string)}`
-    : formatDate(due);
+  const status = done
+    ? {
+        text: `Done ${formatDate(revision.doneOn as string, today)}`,
+        overdue: false,
+      }
+    : dueStatus(due, today);
+  const step = revision.step;
+  const vars = { topicId, revisionId: revision.id };
 
-  const fail = (e: unknown) => {
-    snackbar.show({ message: userMessage(e) });
-    if (
+  const fail = (e: unknown, retry?: () => void) => {
+    const conflict =
       e instanceof ApiError &&
-      (e.code === 'VERSION_CONFLICT' || e.code === 'REVISION_OUT_OF_ORDER')
-    ) {
-      invalidateTopicData(qc, topicId);
-    }
+      (e.code === 'VERSION_CONFLICT' || e.code === 'REVISION_OUT_OF_ORDER');
+    snackbar.show(
+      retry && !conflict && canRetry(e)
+        ? { message: userMessage(e), actionLabel: 'Retry', onAction: retry }
+        : { message: userMessage(e) },
+    );
+    if (conflict) invalidateTopicData(qc, topicId).catch(() => {});
   };
 
   const runUndo = async () => {
     try {
-      await undo.mutateAsync({ topicId, revisionId: revision.id });
+      await undo.mutateAsync(vars);
+      snackbar.show({ message: `Revision ${step} restored` });
     } catch (e) {
       fail(e);
     }
   };
 
+  // Optimistic: the row updates and the snackbar shows at once. Its Undo
+  // appears only once the server has saved the Done, so it can't race it.
   const onDone = async () => {
+    const message = `Revision ${step} done`;
+    const id = snackbar.show({ message });
     try {
-      await complete.mutateAsync({
-        topicId,
-        revisionId: revision.id,
-        doneOn: localToday(),
-      });
-      snackbar.show({
-        message: `Revision ${revision.step} done`,
-        actionLabel: 'Undo',
-        onAction: runUndo,
-      });
+      await complete.mutateAsync({ ...vars, doneOn: localToday() });
+      snackbar.update(id, { message, actionLabel: 'Undo', onAction: runUndo });
     } catch (e) {
-      fail(e);
+      fail(e, onDone);
     }
   };
 
   const onSnooze = async () => {
-    const today = localToday();
+    const now = localToday();
     try {
-      await snooze.mutateAsync({
-        topicId,
-        revisionId: revision.id,
-        today,
+      const res: TopicView | undefined = await snooze.mutateAsync({
+        ...vars,
+        today: now,
         days: 1,
       });
-      snackbar.show({ message: `Snoozed to ${formatDate(addDays(today, 1))}` });
+      const saved = res?.revisions?.find(r => r.id === revision.id);
+      const to =
+        saved?.dueOverride ?? saved?.dueOn ?? addDays(maxDate(now, due), 1);
+      snackbar.show({ message: `Snoozed to ${formatDate(to, now)}` });
     } catch (e) {
       fail(e);
     }
@@ -129,8 +151,17 @@ export function RevisionRow({
             </Text>
           )
         ) : null}
-        <Text style={{ color: done ? colors.success : colors.muted }}>
-          R{revision.step}/{total} · {date}
+        <Text
+          style={{
+            color: done
+              ? colors.success
+              : status.overdue
+              ? colors.danger
+              : colors.muted,
+            fontWeight: status.overdue ? '700' : undefined,
+          }}
+        >
+          {`Revision ${step} of ${total} · ${status.text}`}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
@@ -138,16 +169,20 @@ export function RevisionRow({
           <>
             <Button
               title="Done"
-              onPress={onDone}
+              onPress={() => {
+                // Not awaited: the press returns at once, the result shows in
+                // the snackbar.
+                onDone();
+              }}
               loading={complete.isPending}
-              disabled={snooze.isPending}
+              disabled={snooze.isPending || undo.isPending}
             />
             <Button
               title="Snooze 1 day"
               variant="secondary"
               onPress={onSnooze}
               loading={snooze.isPending}
-              disabled={complete.isPending}
+              disabled={complete.isPending || undo.isPending}
             />
           </>
         ) : null}
@@ -157,6 +192,7 @@ export function RevisionRow({
             variant="secondary"
             onPress={runUndo}
             loading={undo.isPending}
+            disabled={complete.isPending || snooze.isPending}
           />
         ) : null}
       </View>

@@ -34,6 +34,26 @@ export function relativeDay(d: LocalDate, today: LocalDate): string {
 }
 
 /**
+ * Plain status of a pending revision: "Overdue by 3 days", "Due today",
+ * "Due tomorrow" or "In 4 days, 18 Nov".
+ */
+export function dueStatus(
+  due: LocalDate,
+  today: LocalDate,
+): { text: string; overdue: boolean } {
+  const n = daysBetween(today, due);
+  if (n < 0) {
+    return {
+      text: `Overdue by ${-n} ${n === -1 ? 'day' : 'days'}`,
+      overdue: true,
+    };
+  }
+  if (n === 0) return { text: 'Due today', overdue: false };
+  if (n === 1) return { text: 'Due tomorrow', overdue: false };
+  return { text: `In ${n} days, ${formatDate(due, today)}`, overdue: false };
+}
+
+/**
  * A stored "HH:mm" time the way the phone shows times: "20:30" with a
  * 24-hour clock, "8:30 PM" with a 12-hour one.
  */

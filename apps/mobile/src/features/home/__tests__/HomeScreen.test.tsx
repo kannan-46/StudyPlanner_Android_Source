@@ -1,11 +1,17 @@
 import React from 'react';
 import { NativeModules, useWindowDimensions } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import { addDays, localToday, type AgendaItem } from '@planner/shared';
 import { HomeScreen } from '../HomeScreen';
 import {
   ID,
   cleanupClients,
+  topic,
   makeHttp,
   renderWithProviders,
 } from '../../../test/testUtils';
@@ -45,10 +51,16 @@ const mk = (
   bucket,
 });
 
-function setup(agenda: AgendaItem[]) {
+function setup(
+  agenda: AgendaItem[] | ((q: { today: string }) => AgendaItem[]),
+  topics = [topic()],
+) {
   const http = makeHttp();
-  http.get.mockImplementation(async (path: string) => {
-    if (path === '/v1/agenda') return { items: agenda };
+  http.get.mockImplementation(async (path: string, q?: { today: string }) => {
+    if (path === '/v1/agenda') {
+      return { items: typeof agenda === 'function' ? agenda(q!) : agenda };
+    }
+    if (path === '/v1/topics') return topics;
     if (path === '/v1/me') return { name: 'Asha Rao', settings: {} };
     if (path === '/v1/exams') {
       return [
@@ -134,5 +146,97 @@ describe('HomeScreen', () => {
     );
     expect(await screen.findByText('Topic 2')).toBeOnTheScreen();
     expect(screen.getByTestId('home-columns')).toBeOnTheScreen();
+  });
+
+  it('lists overdue revisions apart from today, with plain wording', async () => {
+    await renderWithProviders(
+      <HomeScreen />,
+      setup([mk(1, 'overdue', addDays(today, -3)), mk(2, 'today', today)]),
+    );
+    expect(await screen.findByText('Overdue')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Revision 1 of 2 · Overdue by 3 days'),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Revision 1 of 2 · Due today')).toBeOnTheScreen();
+  });
+
+  it('explains an empty day and names the next revision', async () => {
+    const soon = addDays(today, 4);
+    await renderWithProviders(
+      <HomeScreen />,
+      setup([{ ...mk(3, 'upcoming', soon), topicName: 'Thyroid' }]),
+    );
+    expect(
+      await screen.findByText(
+        /^Nothing to revise today. Thyroid's first revision is on /,
+      ),
+    ).toBeOnTheScreen();
+    expect(screen.getByText(/^Revision 1 of 2 · In 4 days/)).toBeOnTheScreen();
+  });
+
+  it('names a next revision beyond the agenda window from the topics', async () => {
+    const later = addDays(today, 45);
+    const far = topic({
+      name: 'Breast',
+      nextDueOn: later,
+      revisions: [
+        { id: 'R1', step: 1, dueOn: today, doneOn: today, dueOverride: null },
+        { id: 'R2', step: 2, dueOn: later, doneOn: null, dueOverride: null },
+      ],
+    });
+    await renderWithProviders(<HomeScreen />, setup([], [far]));
+    expect(
+      await screen.findByText(/Next up: Breast, revision 2, on /),
+    ).toBeOnTheScreen();
+  });
+
+  it('a brand-new user gets an Add your first topic button', async () => {
+    await renderWithProviders(<HomeScreen />, setup([], []));
+    expect(await screen.findByText('No topics yet')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Add your first topic'));
+    expect(mockNavigate).toHaveBeenCalledWith('TopicForm');
+  });
+
+  it('says All done once the last due revision is done', async () => {
+    let done = false;
+    const http = setup(() => (done ? [] : [mk(1, 'today', today)]));
+    http.post.mockImplementation(async () => {
+      done = true;
+      return {};
+    });
+    await renderWithProviders(<HomeScreen />, http);
+    expect(await screen.findByText('Topic 1')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Done'));
+    expect(
+      await screen.findByText(/^All done for today. Well done!/),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Revision 1 done')).toBeOnTheScreen();
+  });
+
+  it('moves to the new day after midnight without a restart', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 10, 14, 23, 59, 0) });
+    try {
+      const http = setup(q =>
+        q.today === '2026-11-15'
+          ? [{ ...mk(5, 'today', '2026-11-15'), topicName: 'Thyroid' }]
+          : [{ ...mk(5, 'upcoming', '2026-11-15'), topicName: 'Thyroid' }],
+      );
+      await renderWithProviders(<HomeScreen />, http);
+      expect(
+        await screen.findByText(/Thyroid's first revision is on 15 Nov/),
+      ).toBeOnTheScreen();
+      await act(async () => {
+        jest.advanceTimersByTime(90_000);
+      });
+      expect(
+        await screen.findByText('Revision 1 of 2 · Due today'),
+      ).toBeOnTheScreen();
+      expect(http.get).toHaveBeenCalledWith('/v1/agenda', {
+        today: '2026-11-15',
+        days: 30,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

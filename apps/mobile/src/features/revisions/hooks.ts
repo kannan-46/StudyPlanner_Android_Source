@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   completeRevision,
+  undoRevision,
   type AgendaItem,
   type TopicView,
 } from '@planner/shared';
@@ -14,10 +15,28 @@ interface CompleteVars {
   doneOn: string;
 }
 
-export function useCompleteRevision() {
+/**
+ * Revision changes of one topic run one after another (Done, then Undo), so
+ * an Undo tapped while Done is still on its way can't reach the server first.
+ */
+const topicScope = (topicId?: string) =>
+  topicId ? { id: `topic:${topicId}` } : undefined;
+
+/**
+ * Refetch in the background: the mutation (and the snackbar waiting on it)
+ * settles as soon as the server answers, not after every list reloads.
+ */
+const refreshAfter =
+  (qc: ReturnType<typeof useQueryClient>) =>
+  (_d: unknown, _e: unknown, v: { topicId: string }) => {
+    invalidateTopicData(qc, v.topicId).catch(() => {});
+  };
+
+export function useCompleteRevision(topicId?: string) {
   const { revisions } = useApi();
   const qc = useQueryClient();
   return useMutation({
+    scope: topicScope(topicId),
     mutationFn: (v: CompleteVars) =>
       revisions.complete(v.topicId, v.revisionId, v.doneOn),
     onMutate: async v => {
@@ -51,30 +70,49 @@ export function useCompleteRevision() {
       qc.setQueryData(ctx.topicKey, ctx.prevTopic);
       for (const [key, data] of ctx.prevAgenda) qc.setQueryData(key, data);
     },
-    onSettled: (_d, _e, v) => invalidateTopicData(qc, v.topicId),
+    onSettled: refreshAfter(qc),
   });
 }
 
-export function useUndoRevision() {
+export function useUndoRevision(topicId?: string) {
   const { revisions } = useApi();
   const qc = useQueryClient();
   return useMutation({
+    scope: topicScope(topicId),
     mutationFn: (v: { topicId: string; revisionId: string }) =>
       revisions.undo(v.topicId, v.revisionId),
-    onSettled: (_d, _e, v) => invalidateTopicData(qc, v.topicId),
+    onMutate: async v => {
+      const topicKey = queryKeys.topic(v.topicId);
+      await qc.cancelQueries({ queryKey: topicKey });
+      const prevTopic = qc.getQueryData<TopicView>(topicKey);
+      if (prevTopic) {
+        try {
+          const next = undoRevision(prevTopic, v.revisionId);
+          qc.setQueryData<TopicView>(topicKey, { ...prevTopic, ...next });
+        } catch {
+          // Not applicable locally; the server decides.
+        }
+      }
+      return { topicKey, prevTopic };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx) qc.setQueryData(ctx.topicKey, ctx.prevTopic);
+    },
+    onSettled: refreshAfter(qc),
   });
 }
 
-export function useSnoozeRevision() {
+export function useSnoozeRevision(topicId?: string) {
   const { revisions } = useApi();
   const qc = useQueryClient();
   return useMutation({
+    scope: topicScope(topicId),
     mutationFn: (v: {
       topicId: string;
       revisionId: string;
       today: string;
       days: number;
     }) => revisions.snooze(v.topicId, v.revisionId, v.today, v.days),
-    onSettled: (_d, _e, v) => invalidateTopicData(qc, v.topicId),
+    onSettled: refreshAfter(qc),
   });
 }

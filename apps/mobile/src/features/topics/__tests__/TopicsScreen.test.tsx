@@ -106,8 +106,8 @@ describe('TopicDetailContent', () => {
       http,
     );
     expect(await screen.findByText('Some notes')).toBeOnTheScreen();
-    expect(screen.getByText(/✓ 5 Nov/)).toBeOnTheScreen();
-    expect(screen.getByText(/12 Nov/)).toBeOnTheScreen();
+    expect(screen.getByText(/^Revision 1 of 2 · Done 5 Nov/)).toBeOnTheScreen();
+    expect(screen.getByText(/^Revision 2 of 2 · /)).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Delete'));
     expect(alert.mock.calls[0][0]).toBe('Delete topic?');
     expect(alert.mock.calls[0][1]).toBe('This removes its revision history.');

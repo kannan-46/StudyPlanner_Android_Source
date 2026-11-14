@@ -1,16 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  localToday,
-  type MockTestInput,
-  type MockTestUpdate,
-} from '@planner/shared';
+import { type MockTestInput, type MockTestUpdate } from '@planner/shared';
 import { useApi } from '../../shared/api/ApiProvider';
 import { queryKeys } from '../../shared/api/queryClient';
 import { invalidateMockTestData } from '../../shared/api/invalidate';
+import { useLocalToday } from '../../shared/lib/useLocalToday';
 
 export function useStats() {
   const { stats } = useApi();
-  const today = localToday();
+  const today = useLocalToday();
   return useQuery({
     queryKey: queryKeys.stats(today),
     queryFn: () => stats.get(today),

@@ -60,3 +60,65 @@ it('a new snackbar replaces the old one', async () => {
   expect(queryByText('One')).toBeNull();
   expect(getByText('Two')).toBeTruthy();
 });
+
+it('update replaces its own snackbar and restarts the timer', async () => {
+  const { getByText, queryByText } = await setup();
+  let id = 0;
+  await act(async () => {
+    id = api.show({ message: 'Revision 1 done' });
+  });
+  await act(async () => {
+    jest.advanceTimersByTime(4000);
+  });
+  let ok = false;
+  await act(async () => {
+    ok = api.update(id, {
+      message: 'Revision 1 done',
+      actionLabel: 'Undo',
+      onAction: () => {},
+    });
+  });
+  expect(ok).toBe(true);
+  expect(getByText('Undo')).toBeTruthy();
+  await act(async () => {
+    jest.advanceTimersByTime(4000);
+  });
+  expect(getByText('Revision 1 done')).toBeTruthy();
+  await act(async () => {
+    jest.advanceTimersByTime(1001);
+  });
+  expect(queryByText('Revision 1 done')).toBeNull();
+});
+
+it('update shows a timed-out snackbar again', async () => {
+  const { getByText } = await setup();
+  let id = 0;
+  await act(async () => {
+    id = api.show({ message: 'Saving' });
+  });
+  await act(async () => {
+    jest.advanceTimersByTime(6000);
+  });
+  await act(async () => {
+    api.update(id, { message: 'Saved' });
+  });
+  expect(getByText('Saved')).toBeTruthy();
+});
+
+it('update does nothing once another snackbar replaced it', async () => {
+  const { getByText, queryByText } = await setup();
+  let id = 0;
+  await act(async () => {
+    id = api.show({ message: 'One' });
+  });
+  await act(async () => {
+    api.show({ message: 'Two' });
+  });
+  let ok = true;
+  await act(async () => {
+    ok = api.update(id, { message: 'One again' });
+  });
+  expect(ok).toBe(false);
+  expect(queryByText('One again')).toBeNull();
+  expect(getByText('Two')).toBeTruthy();
+});

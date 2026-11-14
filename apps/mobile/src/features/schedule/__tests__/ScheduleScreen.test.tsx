@@ -170,4 +170,41 @@ describe('ScheduleScreen', () => {
     ).toBeOnTheScreen();
     await waitFor(() => expect(agendaCalls()).toBeGreaterThan(1));
   });
+
+  it('an exam with nothing due says so and offers Show all', async () => {
+    const other = topic({ id: ID(103), name: 'Other', examIds: [] });
+    await renderWithProviders(
+      <ScheduleScreen />,
+      httpWith([item('Other', 'today', today, ID(103))], [topic(), other]),
+    );
+    await screen.findByText('Other');
+    await fireEvent.press(await screen.findByText('MS General Surgery'));
+    expect(
+      await screen.findByText('Nothing due for MS General Surgery'),
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByText('Nothing due — add topics or enjoy the break'),
+    ).toBeNull();
+    await fireEvent.press(screen.getByText('Show all'));
+    expect(await screen.findByText('Other')).toBeOnTheScreen();
+  });
+
+  it('expanded: the open topic is marked as selected in the list', async () => {
+    mockDims(1000, 700);
+    await renderWithProviders(<ScheduleScreen />, httpWith(items));
+    await fireEvent.press(await screen.findByText('Hernia'));
+    expect(screen.getByTestId(`schedule-row-${ID(100)}`)).toBeSelected();
+    expect(screen.getByTestId(`schedule-row-${ID(101)}`)).not.toBeSelected();
+    await fireEvent.press(screen.getByText('Old topic'));
+    expect(screen.getByTestId(`schedule-row-${ID(101)}`)).toBeSelected();
+    expect(screen.getByTestId(`schedule-row-${ID(100)}`)).not.toBeSelected();
+  });
+
+  it('words row status plainly', async () => {
+    await renderWithProviders(<ScheduleScreen />, httpWith(items));
+    expect(
+      await screen.findByText('Revision 2 of 2 · Overdue by 3 days'),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Revision 2 of 2 · Due today')).toBeOnTheScreen();
+  });
 });
