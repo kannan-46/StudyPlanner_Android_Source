@@ -5,9 +5,10 @@ import React, {
   type ReactNode,
 } from 'react';
 import { useColorScheme } from 'react-native';
+import type { ThemeMode } from '../lib/localPrefs';
 import { darkColors, lightColors, radius, spacing, type Colors } from './theme';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
+export type { ThemeMode };
 
 export type ThemeValue = {
   colors: Colors;
@@ -42,4 +43,19 @@ export function ThemeProvider({
 
 export function useTheme(): ThemeValue {
   return useContext(ThemeContext);
+}
+
+export type ThemeModeValue = {
+  mode: ThemeMode;
+  /** Applies the theme straight away; saving happens in the background. */
+  setMode(mode: ThemeMode): void;
+};
+
+export const ThemeModeContext = createContext<ThemeModeValue | null>(null);
+
+export function useThemeMode(): ThemeModeValue {
+  const ctx = useContext(ThemeModeContext);
+  if (!ctx)
+    throw new Error('useThemeMode must be used inside AppThemeProvider');
+  return ctx;
 }

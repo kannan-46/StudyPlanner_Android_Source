@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { render } from '@testing-library/react-native';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,7 +6,11 @@ import type { SubjectView, ExamView, TopicView } from '@planner/shared';
 import { createQueryClient } from '../shared/api/queryClient';
 import { ApiProvider } from '../shared/api/ApiProvider';
 import type { Http } from '../shared/api/http';
-import { ThemeProvider } from '../shared/ui/ThemeProvider';
+import {
+  ThemeModeContext,
+  ThemeProvider,
+  type ThemeMode,
+} from '../shared/ui/ThemeProvider';
 import { SnackbarProvider } from '../shared/ui/Snackbar';
 
 export const ID = (n: number) => String(n).padStart(24, '0');
@@ -74,6 +78,23 @@ export function makeHttp(topics: TopicView[] = []): Mocks {
   };
 }
 
+/** Local theme mode, like AppThemeProvider but without storage or server. */
+export function TestThemeMode({
+  initial = 'light',
+  children,
+}: {
+  initial?: ThemeMode;
+  children: React.ReactNode;
+}) {
+  const [mode, setMode] = useState<ThemeMode>(initial);
+  const value = useMemo(() => ({ mode, setMode }), [mode]);
+  return (
+    <ThemeModeContext.Provider value={value}>
+      <ThemeProvider mode={mode}>{children}</ThemeProvider>
+    </ThemeModeContext.Provider>
+  );
+}
+
 const clients: QueryClient[] = [];
 export async function cleanupClients() {
   for (const c of clients.splice(0)) {
@@ -96,13 +117,13 @@ export async function renderWithProviders(ui: React.ReactElement, http: Mocks) {
         insets: { top: 0, left: 0, right: 0, bottom: 0 },
       }}
     >
-      <ThemeProvider mode="light">
+      <TestThemeMode>
         <QueryClientProvider client={qc}>
           <ApiProvider http={http as unknown as Http}>
             <SnackbarProvider>{ui}</SnackbarProvider>
           </ApiProvider>
         </QueryClientProvider>
-      </ThemeProvider>
+      </TestThemeMode>
     </SafeAreaProvider>,
   );
 }

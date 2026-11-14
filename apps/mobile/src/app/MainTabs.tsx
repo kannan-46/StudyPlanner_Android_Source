@@ -27,9 +27,36 @@ const GLYPHS: Record<keyof MainTabParamList, string> = {
   Settings: '⚙',
 };
 
-const glyph = (name: keyof MainTabParamList, color: string) => (
-  <Text style={{ color, fontSize: 18 }}>{GLYPHS[name]}</Text>
+// The glyph is an icon, so it keeps a fixed size inside the tab bar's fixed
+// icon box even when the phone uses large text (the labels still scale).
+export const TabGlyph = ({
+  name,
+  color,
+  size,
+}: {
+  name: keyof MainTabParamList;
+  color: string;
+  size: number;
+}) => (
+  <Text
+    allowFontScaling={false}
+    importantForAccessibility="no"
+    style={{
+      color,
+      fontSize: Math.round(size * 0.75),
+      lineHeight: size,
+      textAlign: 'center',
+    }}
+  >
+    {GLYPHS[name]}
+  </Text>
 );
+
+const tabGlyph = (
+  name: keyof MainTabParamList,
+  color: string,
+  size: number,
+) => <TabGlyph name={name} color={color} size={size} />;
 
 export function MainTabs() {
   useReminderSnapshotSync();
@@ -40,8 +67,11 @@ export function MainTabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: colors.surface },
-        tabBarIcon: ({ color }) => glyph(route.name, color),
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.line,
+        },
+        tabBarIcon: ({ color, size }) => tabGlyph(route.name, color, size),
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />

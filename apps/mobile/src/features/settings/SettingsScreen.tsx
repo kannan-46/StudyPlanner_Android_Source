@@ -25,7 +25,7 @@ import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { Screen } from '../../shared/ui/Screen';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { TextField } from '../../shared/ui/TextField';
-import { useTheme } from '../../shared/ui/ThemeProvider';
+import { useTheme, useThemeMode } from '../../shared/ui/ThemeProvider';
 import { formatDate } from '../../shared/lib/format';
 import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { configureReminders } from '../../native/reminders';
@@ -94,7 +94,8 @@ export function SettingsScreen() {
   const { colors, radius, spacing } = useTheme();
   const navigation = useNavigation();
   const snackbar = useSnackbar();
-  const { signOut, refreshUser } = useAuth();
+  const { signOut } = useAuth();
+  const { mode: theme, setMode: setTheme } = useThemeMode();
   const meQ = useMe();
   const updateMe = useUpdateMe();
   const deleteAccount = useDeleteAccount();
@@ -105,9 +106,6 @@ export function SettingsScreen() {
   const [intervalsText, setIntervalsText] = useState<string | null>(null);
   const [enabledOv, setEnabledOv] = useState<boolean | null>(null);
   const [timeOv, setTimeOv] = useState<string | null>(null);
-  const [themeOv, setThemeOv] = useState<'system' | 'light' | 'dark' | null>(
-    null,
-  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
@@ -121,7 +119,6 @@ export function SettingsScreen() {
     !!parsed.value && parsed.value.join(', ') !== intervalsSaved;
   const enabled = enabledOv ?? settings.dailyReminder;
   const time = timeOv ?? settings.reminderTime;
-  const theme = themeOv ?? settings.theme;
 
   const preview = useMemo(() => {
     if (!parsed.value) return [];
@@ -162,12 +159,6 @@ export function SettingsScreen() {
     }
     setEnabledOv(null);
     setTimeOv(null);
-  }
-
-  async function saveTheme(next: 'system' | 'light' | 'dark') {
-    const ok = await save({ settings: { theme: next } });
-    if (ok) await refreshUser().catch(() => {});
-    setThemeOv(null);
   }
 
   async function doDelete() {
@@ -302,11 +293,9 @@ export function SettingsScreen() {
             { value: 'dark', label: 'Dark' },
           ]}
           value={theme}
-          onChange={v => {
-            const next = v as 'system' | 'light' | 'dark';
-            setThemeOv(next);
-            saveTheme(next);
-          }}
+          // Applies at once and is kept on the phone; the server copy is
+          // updated in the background.
+          onChange={v => setTheme(v as 'system' | 'light' | 'dark')}
         />
       </Section>
 

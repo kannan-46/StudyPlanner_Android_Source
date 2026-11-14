@@ -122,7 +122,10 @@ debug build with all ABIs and no minification). Install with
 
 JS in `src/`:
 
-- `app/` - `AppProviders`, `RootNavigator`, `MainTabs`, deep `linking`.
+- `app/` - `AppProviders`, `RootNavigator`, `MainTabs`, deep `linking`,
+  `AppTheme` + `themeSync` (theme mode: kept on the device with AsyncStorage,
+  read before the first render, synced to `PATCH /v1/me` in the background;
+  the server value wins only when it changed elsewhere).
 - `features/` - one folder per area: `agenda`, `auth`, `backup`, `exams`,
   `home` (Pomodoro), `me`, `onboarding` (first-run steps), `progress` (mock
   tests), `revisions`, `schedule`, `settings` (Settings, Reminder health,
@@ -131,7 +134,8 @@ JS in `src/`:
 - `native/` - typed wrappers over the native modules.
 - `shared/api` - http client, token store (Keychain), query client, errors.
 - `shared/lib` - formatting, `useOnline`, `useAppForeground`,
-  `useRefetchOnFocus`.
+  `useRefetchOnFocus`, `localPrefs` (AsyncStorage wrapper, mocked in
+  `jest.setup.ts`).
 - `shared/ui` - theme, `responsive.tsx`, Screen, Button, Dialog, Snackbar etc.
 - `test/testUtils.tsx` - test helpers.
 

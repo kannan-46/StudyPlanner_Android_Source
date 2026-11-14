@@ -127,16 +127,20 @@ it('reminder switch saves and reconfigures; failure reverts with a snackbar', as
   );
 });
 
-it('theme change saves and refreshes the signed-in user', async () => {
+it('theme chips apply the local theme at once, without waiting for the server', async () => {
   const http = setup();
   await renderWithProviders(<SettingsScreen />, http);
-  await fireEvent.press(await screen.findByText('Dark'));
-  await waitFor(() =>
-    expect(http.patch).toHaveBeenCalledWith('/v1/me', {
-      settings: { theme: 'dark' },
-    }),
-  );
-  await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+  const chip = (name: string) => screen.getByRole('radio', { name });
+  await screen.findByText('Dark');
+  expect(chip('Light').props.accessibilityState.selected).toBe(true);
+  await fireEvent.press(chip('Dark'));
+  expect(chip('Dark').props.accessibilityState.selected).toBe(true);
+  await fireEvent.press(chip('System'));
+  expect(chip('System').props.accessibilityState.selected).toBe(true);
+  expect(chip('Dark').props.accessibilityState.selected).toBe(false);
+  // Saving to the server is the app theme provider's job, not this screen's.
+  expect(http.patch).not.toHaveBeenCalled();
+  expect(refreshUser).not.toHaveBeenCalled();
 });
 
 it('delete account stays disabled until DELETE is typed', async () => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWindowDimensions } from 'react-native';
+import { StyleSheet, useWindowDimensions } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {
@@ -165,4 +165,26 @@ it('maps studyplanner://schedule to the Schedule tab', () => {
   expect(linking.config?.screens).toMatchObject({
     MainTabs: { screens: { Schedule: 'schedule' } },
   });
+});
+
+it('tab glyphs keep a fixed size with large system text', async () => {
+  (useWindowDimensions as jest.Mock).mockReturnValue({
+    width: 360,
+    height: 800,
+    scale: 2,
+    fontScale: 2,
+  });
+  // Screens stay loading; only the tab bar matters here.
+  (http.get as jest.Mock).mockReturnValue(new Promise(() => {}));
+  await setup(<MainTabs />);
+  for (const g of ['⌂', '▦', '☰', '◔', '⚙']) {
+    // Active and inactive copies are both rendered.
+    for (const glyph of screen.getAllByText(g)) {
+      expect(glyph.props.allowFontScaling).toBe(false);
+      const { fontSize, lineHeight } = StyleSheet.flatten(glyph.props.style);
+      // Sized from the tab bar's icon box, not from the system text size.
+      expect(lineHeight).toBeLessThanOrEqual(25);
+      expect(fontSize).toBeLessThan(lineHeight);
+    }
+  }
 });
