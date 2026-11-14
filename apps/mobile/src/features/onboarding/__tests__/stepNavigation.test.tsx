@@ -10,6 +10,7 @@ import {
   makeHttp,
   mockHardwareBack,
   renderWithProviders,
+  topic,
 } from '../../../test/testUtils';
 
 jest.mock('../../auth/AuthProvider', () => ({
@@ -53,11 +54,20 @@ afterEach(async () => {
   await cleanupClients();
 });
 
-const renderFlow = () => {
-  const http = makeHttp();
+const STEPS = ['Exams', 'Intervals', 'Reminders', 'Topics'] as const;
+
+/** Opens setup on `step` (1-4) with the earlier steps behind it. */
+const renderFlow = (step = 1, http = makeHttp()) => {
   http.patch.mockResolvedValue({});
+  const initialState =
+    step > 1
+      ? {
+          index: step - 1,
+          routes: STEPS.slice(0, step).map(name => ({ name })),
+        }
+      : undefined;
   return renderWithProviders(
-    <NavigationContainer>
+    <NavigationContainer initialState={initialState}>
       <OnboardingNavigator />
     </NavigationContainer>,
     http,
@@ -138,4 +148,67 @@ it('Android back on step 2 goes to step 1 without asking', async () => {
   await waitFor(() => expect(screen.queryByText('Step 2 of 4')).toBeNull());
   expect(screen.getByText('Step 1 of 4')).toBeOnTheScreen();
   expect(screen.queryByText('Leave setup?')).toBeNull();
+});
+
+it.each([3, 4])(
+  'step %i has a Back button that returns to the step before',
+  async step => {
+    await renderFlow(step);
+    expect(await screen.findByText(`Step ${step} of 4`)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(
+      await screen.findByText(`Step ${step - 1} of 4`),
+    ).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(screen.queryByText(`Step ${step} of 4`)).toBeNull(),
+    );
+  },
+);
+
+describe('step 4 with a topic half typed', () => {
+  const typeName = async () => {
+    await screen.findByText('Step 4 of 4');
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Hernia');
+  };
+
+  it('Back asks before throwing the topic away', async () => {
+    await renderFlow(4);
+    await typeName();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByText('Discard changes?')).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Keep editing' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Discard changes?')).toBeNull(),
+    );
+    expect(screen.getByText('Step 4 of 4')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Topic name').props.value).toBe('Hernia');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Discard' }),
+    );
+    expect(await screen.findByText('Step 3 of 4')).toBeOnTheScreen();
+  });
+
+  it('Android back asks too', async () => {
+    await renderFlow(4);
+    await typeName();
+    await pressBack();
+    expect(await screen.findByText('Discard changes?')).toBeOnTheScreen();
+    expect(screen.getByText('Step 4 of 4')).toBeOnTheScreen();
+  });
+
+  it('goes back without asking once the topic has been added', async () => {
+    const http = makeHttp();
+    http.post.mockResolvedValue(topic());
+    await renderFlow(4, http);
+    await typeName();
+    await fireEvent.press(await screen.findByText('Anatomy'));
+    await fireEvent.press(screen.getByText('Add another'));
+    expect(await screen.findByText('Added: 1 topic')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByText('Step 3 of 4')).toBeOnTheScreen();
+    expect(screen.queryByText('Discard changes?')).toBeNull();
+  });
 });

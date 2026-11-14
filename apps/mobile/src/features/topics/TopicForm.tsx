@@ -100,18 +100,21 @@ export function TopicForm({
   const isNew = subjectChoice === NEW_SUBJECT;
 
   // What the form opened with, to tell whether anything has been changed.
-  const opened = useRef({
+  // After "Add another" it is what the form kept for the next topic.
+  const openedRef = useRef({
     name,
     subjectChoice,
+    newSubject,
     examIds,
     studiedOn,
     intervalsText,
     notes,
-  }).current;
+  });
+  const opened = openedRef.current;
   const dirty =
     name !== opened.name ||
     subjectChoice !== opened.subjectChoice ||
-    newSubject !== '' ||
+    newSubject !== opened.newSubject ||
     !sameSet(examIds, opened.examIds) ||
     studiedOn !== opened.studiedOn ||
     intervalsText !== opened.intervalsText ||
@@ -185,7 +188,18 @@ export function TopicForm({
       if (mode === 'create') {
         const input: TopicCreateInput = { ...parsed.data, subjectId };
         const created = await createTopic.mutateAsync(input);
-        if (clearNameOnSave) setName('');
+        if (clearNameOnSave) {
+          openedRef.current = {
+            name: '',
+            subjectChoice,
+            newSubject,
+            examIds,
+            studiedOn,
+            intervalsText,
+            notes,
+          };
+          setName('');
+        }
         onSaved(created);
         return;
       }

@@ -1,15 +1,25 @@
-import React, { useRef, useState } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
+import { NavigationContext } from '@react-navigation/native';
 import { Button } from '../../shared/ui/Button';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { useTheme } from '../../shared/ui/ThemeProvider';
+import { useLeaveGuard } from '../../shared/ui/useLeaveGuard';
 import { useAuth } from '../auth/AuthProvider';
 import { useUpdateMe } from '../me/hooks';
 import { useTopics } from '../topics/hooks';
 import { TopicForm } from '../topics/TopicForm';
 import { StepShell } from './StepShell';
 
+/** Asks "Discard changes?" before Back throws away a half-typed topic. */
+function LeaveGuard({ dirty }: { dirty: boolean }) {
+  return useLeaveGuard(dirty).dialog;
+}
+
 export function TopicsStep() {
+  // Optional, so the step can also be shown on its own.
+  const navigation = useContext(NavigationContext);
+  const [dirty, setDirty] = useState(false);
   const { colors, spacing } = useTheme();
   const { refreshUser } = useAuth();
   const updateMe = useUpdateMe();
@@ -58,7 +68,9 @@ export function TopicsStep() {
         clearNameOnSave
         submitLabel="Add another"
         onSaved={() => setAdded(n => n + 1)}
+        onDirtyChange={setDirty}
       />
+      {navigation ? <LeaveGuard dirty={dirty} /> : null}
       {error ? <ErrorRetry error={error} onRetry={complete} /> : null}
       <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
         <Button
