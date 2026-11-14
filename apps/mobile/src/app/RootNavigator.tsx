@@ -3,7 +3,10 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Banner } from '../shared/ui/Banner';
 import { useOnline } from '../shared/lib/useOnline';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+} from '@react-navigation/native-stack';
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { useAuth } from '../features/auth/AuthProvider';
 import { SignInScreen } from '../features/auth/SignInScreen';
@@ -14,6 +17,7 @@ import { ReminderHealthScreen } from '../features/settings/ReminderHealthScreen'
 import { ManageExamsSubjectsScreen } from '../features/settings/ManageExamsSubjectsScreen';
 import { MockTestFormScreen } from '../features/mocktests/MockTestFormScreen';
 import { Screen } from '../shared/ui/Screen';
+import { StackHeader, UnderHeaderContext } from '../shared/ui/StackHeader';
 import { useTheme } from '../shared/ui/ThemeProvider';
 import { MainTabs, type MainTabParamList } from './MainTabs';
 
@@ -58,24 +62,69 @@ function Splash() {
   );
 }
 
+/** Tells Screen when a stack header is drawn above it. */
+function underHeaderLayout({
+  children,
+  options,
+}: {
+  children: React.ReactElement;
+  options: NativeStackNavigationOptions;
+}) {
+  return (
+    <UnderHeaderContext.Provider value={options.headerShown !== false}>
+      {children}
+    </UnderHeaderContext.Provider>
+  );
+}
+
 function RootScreens() {
   const { state } = useAuth();
+  const { colors } = useTheme();
   if (state.status === 'loading') return <Splash />;
   if (state.status === 'signedOut') return <SignInScreen />;
   if (state.user.onboardingCompletedAt === null) {
     return <OnboardingNavigator />;
   }
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="MainTabs" component={MainTabs} />
-      <Stack.Screen name="TopicForm" component={TopicFormScreen} />
-      <Stack.Screen name="TopicDetail" component={TopicDetailScreen} />
-      <Stack.Screen name="ReminderHealth" component={ReminderHealthScreen} />
+    <Stack.Navigator
+      screenOptions={{
+        header: StackHeader,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+      screenLayout={underHeaderLayout}
+    >
+      <Stack.Screen
+        name="MainTabs"
+        component={MainTabs}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="TopicForm"
+        component={TopicFormScreen}
+        options={({ route }) => ({
+          title: route.params?.topicId ? 'Edit topic' : 'Add topic',
+        })}
+      />
+      <Stack.Screen
+        name="TopicDetail"
+        component={TopicDetailScreen}
+        options={{ title: 'Topic' }}
+      />
+      <Stack.Screen
+        name="ReminderHealth"
+        component={ReminderHealthScreen}
+        options={{ title: 'Reminder health' }}
+      />
       <Stack.Screen
         name="ManageExamsSubjects"
         component={ManageExamsSubjectsScreen}
+        options={{ title: 'Exams & subjects' }}
       />
-      <Stack.Screen name="MockTestForm" component={MockTestFormScreen} />
+      <Stack.Screen
+        name="MockTestForm"
+        component={MockTestFormScreen}
+        options={{ title: 'Add mock test' }}
+      />
     </Stack.Navigator>
   );
 }

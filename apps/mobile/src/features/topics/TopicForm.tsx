@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import {
   localToday,
@@ -46,6 +46,8 @@ export type TopicFormProps = {
   /** Overrides the submit button label. */
   submitLabel?: string;
   onSaved: (topic: TopicView) => void;
+  /** Told whether the form now differs from how it opened. */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 function parseIntervals(text: string): number[] | undefined | 'invalid' {
@@ -65,6 +67,7 @@ export function TopicForm({
   clearNameOnSave,
   submitLabel,
   onSaved,
+  onDirtyChange,
 }: TopicFormProps) {
   const { colors, spacing } = useTheme();
   const { subjects: subjectsApi, me: meApi } = useApi();
@@ -95,6 +98,27 @@ export function TopicForm({
   const createdSubject = useRef<{ key: string; id: string } | null>(null);
 
   const isNew = subjectChoice === NEW_SUBJECT;
+
+  // What the form opened with, to tell whether anything has been changed.
+  const opened = useRef({
+    name,
+    subjectChoice,
+    examIds,
+    studiedOn,
+    intervalsText,
+    notes,
+  }).current;
+  const dirty =
+    name !== opened.name ||
+    subjectChoice !== opened.subjectChoice ||
+    newSubject !== '' ||
+    !sameSet(examIds, opened.examIds) ||
+    studiedOn !== opened.studiedOn ||
+    intervalsText !== opened.intervalsText ||
+    notes !== opened.notes;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   async function resolveSubjectId(): Promise<string> {
     if (!isNew) return subjectChoice;

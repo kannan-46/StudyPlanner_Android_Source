@@ -1,4 +1,4 @@
-import React, { type ReactNode } from 'react';
+import React, { useLayoutEffect, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Text, View } from 'react-native';
 import {
   useNavigation,
@@ -78,6 +78,8 @@ export type TopicDetailContentProps = {
   onEdit: () => void;
   onDeleted: () => void;
   renderRevision?: (r: RevisionView, all: RevisionView[]) => ReactNode;
+  /** False when a stack header already shows the topic name. */
+  showName?: boolean;
 };
 
 /** Shared by the stack screen and the expanded master-detail pane. */
@@ -86,6 +88,7 @@ export function TopicDetailContent({
   onEdit,
   onDeleted,
   renderRevision,
+  showName = true,
 }: TopicDetailContentProps) {
   const { colors, spacing } = useTheme();
   const snackbar = useSnackbar();
@@ -130,12 +133,14 @@ export function TopicDetailContent({
   return (
     <View style={{ gap: spacing.md }}>
       <View>
-        <Text
-          accessibilityRole="header"
-          style={{ color: colors.text, fontSize: 22, fontWeight: '700' }}
-        >
-          {t.name}
-        </Text>
+        {showName ? (
+          <Text
+            accessibilityRole="header"
+            style={{ color: colors.text, fontSize: 22, fontWeight: '700' }}
+          >
+            {t.name}
+          </Text>
+        ) : null}
         <Text style={{ color: colors.muted }}>
           {[subject, ...exams].filter(Boolean).join(' · ')}
         </Text>
@@ -174,10 +179,15 @@ export function TopicDetailScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { params } = useRoute<RouteProp<RootStackParamList, 'TopicDetail'>>();
+  const name = useTopic(params.topicId).data?.name;
+  useLayoutEffect(() => {
+    if (name) navigation.setOptions({ title: name });
+  }, [navigation, name]);
   return (
     <Screen scroll>
       <TopicDetailContent
         topicId={params.topicId}
+        showName={false}
         onEdit={() =>
           navigation.navigate('TopicForm', { topicId: params.topicId })
         }

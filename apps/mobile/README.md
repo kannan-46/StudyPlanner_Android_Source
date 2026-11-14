@@ -137,7 +137,11 @@ JS in `src/`:
   `useRefetchOnFocus`, `localPrefs` (AsyncStorage wrapper, mocked in
   `jest.setup.ts`).
 - `shared/ui` - theme, `responsive.tsx`, Screen, Button, Dialog, Snackbar etc.
-- `test/testUtils.tsx` - test helpers.
+  Pushed stack screens get `StackHeader` (title + 48 dp back arrow, set via
+  `options.title` in `RootNavigator`); forms call `useLeaveGuard(dirty)` to
+  ask "Discard changes?" before unsaved input is lost.
+- `test/testUtils.tsx` - test helpers (`mockHardwareBack()` stands in for the
+  Android back button, which Jest's iOS BackHandler ignores).
 
 Kotlin in `android/app/src/main/java/com/surgicalstudyplanner/app/`,
 registered by `PlannerPackage`:

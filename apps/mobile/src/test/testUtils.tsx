@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { BackHandler } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -126,4 +127,34 @@ export async function renderWithProviders(ui: React.ReactElement, http: Mocks) {
       </TestThemeMode>
     </SafeAreaProvider>,
   );
+}
+
+/**
+ * Stands in for Android's back button (Jest runs the iOS BackHandler, which
+ * ignores listeners). Call before rendering; `press()` runs the newest
+ * listener first, like Android, and returns whether one handled it.
+ */
+export function mockHardwareBack() {
+  type Handler = () => boolean | null | undefined;
+  const handlers: Handler[] = [];
+  const spy = jest
+    .spyOn(BackHandler, 'addEventListener')
+    .mockImplementation((_event, handler) => {
+      handlers.push(handler as Handler);
+      return {
+        remove: () => {
+          const i = handlers.indexOf(handler as Handler);
+          if (i >= 0) handlers.splice(i, 1);
+        },
+      };
+    });
+  const exitSpy = jest.spyOn(BackHandler, 'exitApp').mockImplementation();
+  return {
+    press: () => [...handlers].reverse().some(h => h() === true),
+    exitApp: exitSpy,
+    restore: () => {
+      spy.mockRestore();
+      exitSpy.mockRestore();
+    },
+  };
 }

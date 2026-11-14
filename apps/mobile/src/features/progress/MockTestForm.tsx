@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
   localToday,
@@ -21,7 +21,14 @@ const FIELDS: string[] = ['title', 'takenOn', 'score', 'maxScore'];
 const toNumber = (t: string) =>
   t.trim() === '' ? NaN : Number(t.trim().replace(',', '.'));
 
-export function MockTestForm({ onSaved }: { onSaved: () => void }) {
+export function MockTestForm({
+  onSaved,
+  onDirtyChange,
+}: {
+  onSaved: () => void;
+  /** Told whether anything has been typed or changed. */
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { colors, spacing } = useTheme();
   const examsQ = useExams();
   const create = useCreateMockTest();
@@ -34,6 +41,16 @@ export function MockTestForm({ onSaved }: { onSaved: () => void }) {
   const [errors, setErrors] = useState<Errors>({});
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
+  const openedOn = useRef(takenOn).current;
+  const dirty =
+    title !== '' ||
+    score !== '' ||
+    maxScore !== '' ||
+    examId !== '' ||
+    takenOn !== openedOn;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   async function submit() {
     setSubmitError(null);

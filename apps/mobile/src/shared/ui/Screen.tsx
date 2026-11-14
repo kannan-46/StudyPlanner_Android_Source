@@ -1,7 +1,8 @@
-import React, { type ReactNode } from 'react';
+import React, { useContext, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ResponsiveContainer } from './responsive';
+import { UnderHeaderContext } from './StackHeader';
 import { useTheme } from './ThemeProvider';
 
 export function Screen({
@@ -15,6 +16,8 @@ export function Screen({
   fullWidth?: boolean;
 }) {
   const { colors, spacing } = useTheme();
+  // Under a stack header the header already clears the status bar.
+  const underHeader = useContext(UnderHeaderContext);
   const body = scroll ? (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -33,7 +36,11 @@ export function Screen({
   const content =
     fullWidth && !scroll ? <View style={{ flex: 1 }}>{children}</View> : body;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView
+      testID="screen"
+      edges={underHeader ? ['left', 'right', 'bottom'] : undefined}
+      style={{ flex: 1, backgroundColor: colors.background }}
+    >
       {content}
     </SafeAreaView>
   );
