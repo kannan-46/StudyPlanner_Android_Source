@@ -103,8 +103,7 @@ export function RemindersStep() {
 
   const notifOk = status?.notificationsEnabled ?? false;
   const alarmOk = status?.exactAlarmsAllowed ?? false;
-  const batteryOk = status?.ignoringBatteryOptimizations ?? false;
-  const missing = !(notifOk && alarmOk && batteryOk);
+  const missing = !(notifOk && alarmOk);
 
   async function allowNotifications() {
     try {
@@ -205,12 +204,6 @@ export function RemindersStep() {
         ok={alarmOk}
         action="Allow"
         onPress={() => openReminderSettings('exactAlarm')}
-      />
-      <PermissionRow
-        label="Battery"
-        ok={batteryOk}
-        action="Unrestrict"
-        onPress={() => openReminderSettings('battery')}
       />
       {missing ? (
         <View style={{ marginVertical: spacing.md }}>

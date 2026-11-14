@@ -184,7 +184,7 @@ describe('RemindersStep', () => {
     await waitFor(() => expect(screen.queryByText('Not allowed')).toBeNull());
   });
 
-  it('opens settings for battery and re-checks on foreground', async () => {
+  it('shows only Notifications and Exact alarms, never a Battery row', async () => {
     (getReminderStatus as jest.Mock).mockResolvedValue(
       status({
         notificationsEnabled: true,
@@ -192,15 +192,23 @@ describe('RemindersStep', () => {
       }),
     );
     await renderStep('Reminders');
-    await fireEvent.press(
-      await screen.findByRole('button', { name: 'Unrestrict' }),
-    );
-    expect(openReminderSettings).toHaveBeenCalledWith('battery');
+    expect(await screen.findByText('Notifications')).toBeOnTheScreen();
+    expect(screen.getByText('Exact alarms')).toBeOnTheScreen();
+    expect(screen.queryByText('Battery')).toBeNull();
+    expect(screen.queryByText('Not allowed')).toBeNull();
+    expect(screen.queryByText(/reminders may not appear/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Unrestrict' })).toBeNull();
+  });
+
+  it('re-checks exact alarms on foreground', async () => {
     (getReminderStatus as jest.Mock).mockResolvedValue(
-      status({
-        notificationsEnabled: true,
-        ignoringBatteryOptimizations: true,
-      }),
+      status({ notificationsEnabled: true, exactAlarmsAllowed: false }),
+    );
+    await renderStep('Reminders');
+    await fireEvent.press(await screen.findByRole('button', { name: 'Allow' }));
+    expect(openReminderSettings).toHaveBeenCalledWith('exactAlarm');
+    (getReminderStatus as jest.Mock).mockResolvedValue(
+      status({ notificationsEnabled: true }),
     );
     const listeners = (AppState.addEventListener as jest.Mock).mock.calls
       .filter(c => c[0] === 'change')
@@ -208,7 +216,7 @@ describe('RemindersStep', () => {
     listeners.forEach(l => l('background'));
     listeners.forEach(l => l('active'));
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Unrestrict' })).toBeNull(),
+      expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull(),
     );
   });
 

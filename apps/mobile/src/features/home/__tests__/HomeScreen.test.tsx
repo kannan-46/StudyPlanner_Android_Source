@@ -1,6 +1,6 @@
 import React from 'react';
 import { NativeModules, useWindowDimensions } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { addDays, localToday, type AgendaItem } from '@planner/shared';
 import { HomeScreen } from '../HomeScreen';
 import {
@@ -97,6 +97,21 @@ describe('HomeScreen', () => {
     expect(await screen.findByText('Reminders are off')).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Fix'));
     expect(mockNavigate).toHaveBeenCalledWith('ReminderHealth');
+  });
+
+  it('no reminder banner when only battery optimisation is on', async () => {
+    NativeModules.Reminders = {
+      getStatus: jest.fn().mockResolvedValue({
+        notificationsEnabled: true,
+        exactAlarmsAllowed: true,
+        ignoringBatteryOptimizations: false,
+      }),
+    };
+    await renderWithProviders(<HomeScreen />, setup([]));
+    await waitFor(() =>
+      expect(NativeModules.Reminders.getStatus).toHaveBeenCalled(),
+    );
+    expect(screen.queryByText('Reminders are off')).toBeNull();
   });
 
   it('Add topic navigates to the form', async () => {

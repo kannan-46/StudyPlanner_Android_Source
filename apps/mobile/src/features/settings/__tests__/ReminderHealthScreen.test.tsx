@@ -57,6 +57,19 @@ it('notifications off shows "Off — Fix" which opens notification settings', as
   expect(openReminderSettings).toHaveBeenCalledWith('notifications');
 });
 
+it('battery is an optional tip, never an error row', async () => {
+  (getReminderStatus as jest.Mock).mockResolvedValue(
+    status({ ignoringBatteryOptimizations: false }),
+  );
+  await renderWithProviders(<ReminderHealthScreen />, makeHttp());
+  expect(await screen.findByText('Optional: background usage')).toBeTruthy();
+  expect(screen.queryByText('Off — Fix')).toBeNull();
+  expect(screen.queryByText('Battery')).toBeNull();
+  expect(screen.queryByText('✗')).toBeNull();
+  await fireEvent.press(screen.getByText('Open battery settings'));
+  expect(openReminderSettings).toHaveBeenCalledWith('battery');
+});
+
 it('shows ticks when everything is on and the next reminder', async () => {
   const at = new Date(2026, 10, 14, 8, 0).getTime(); // Saturday
   (getReminderStatus as jest.Mock).mockResolvedValue(

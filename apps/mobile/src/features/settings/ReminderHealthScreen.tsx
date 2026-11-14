@@ -129,11 +129,27 @@ export function ReminderHealthScreen() {
               ok={status?.exactAlarmsAllowed ?? false}
               kind="exactAlarm"
             />
-            <Row
-              label="Battery"
-              ok={status?.ignoringBatteryOptimizations ?? false}
-              kind="battery"
-            />
+            <View
+              testID="battery-tip"
+              style={{ paddingTop: spacing.sm, gap: spacing.xs }}
+            >
+              <Text style={{ color: colors.text, fontWeight: '600' }}>
+                Optional: background usage
+              </Text>
+              <Text style={{ color: colors.muted }}>
+                If reminders arrive late on your phone, allow this app to run in
+                the background in your phone's battery settings.
+              </Text>
+              <View style={{ alignItems: 'flex-start' }}>
+                <Button
+                  title="Open battery settings"
+                  variant="secondary"
+                  onPress={() => {
+                    openReminderSettings('battery').catch(() => {});
+                  }}
+                />
+              </View>
+            </View>
           </>
         )}
       </Card>
