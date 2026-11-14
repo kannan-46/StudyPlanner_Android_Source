@@ -63,3 +63,58 @@ export async function saveSyncedTheme(mode: ThemeMode | null): Promise<void> {
     // Best effort.
   }
 }
+
+const KEY_ONBOARDING = 'prefs.onboardingStep';
+export const ONBOARDING_STEPS = 4;
+
+/**
+ * The furthest setup step (1-4) this user reached on this phone, so a
+ * relaunch mid-setup resumes there. Never rejects; falls back to step 1.
+ */
+export async function loadOnboardingStep(userId: string): Promise<number> {
+  const read = AsyncStorage.getItem(KEY_ONBOARDING).then(raw => {
+    if (!raw) return 1;
+    const saved = JSON.parse(raw) as { userId?: unknown; step?: unknown };
+    const step = saved.step;
+    return saved.userId === userId &&
+      typeof step === 'number' &&
+      Number.isInteger(step) &&
+      step >= 1 &&
+      step <= ONBOARDING_STEPS
+      ? step
+      : 1;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<number>(resolve => {
+    timer = setTimeout(() => resolve(1), LOAD_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([read, timeout]);
+  } catch {
+    return 1;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function saveOnboardingStep(
+  userId: string,
+  step: number,
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      KEY_ONBOARDING,
+      JSON.stringify({ userId, step }),
+    );
+  } catch {
+    // Best effort: a relaunch then starts setup at step 1 again.
+  }
+}
+
+export async function clearOnboardingStep(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(KEY_ONBOARDING);
+  } catch {
+    // Best effort.
+  }
+}

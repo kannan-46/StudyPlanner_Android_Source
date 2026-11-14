@@ -1,6 +1,13 @@
 import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadThemePrefs, saveSyncedTheme, saveThemeMode } from '../localPrefs';
+import {
+  clearOnboardingStep,
+  loadOnboardingStep,
+  loadThemePrefs,
+  saveOnboardingStep,
+  saveSyncedTheme,
+  saveThemeMode,
+} from '../localPrefs';
 
 beforeEach(async () => {
   await AsyncStorage.clear();
@@ -59,4 +66,36 @@ it('a storage read that hangs does not block startup', async () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+describe('onboarding step', () => {
+  it('starts at step 1 on a fresh install', async () => {
+    expect(await loadOnboardingStep('u1')).toBe(1);
+  });
+
+  it('round-trips the step for the same user', async () => {
+    await saveOnboardingStep('u1', 3);
+    expect(await loadOnboardingStep('u1')).toBe(3);
+  });
+
+  it('ignores a step saved by another account', async () => {
+    await saveOnboardingStep('u1', 3);
+    expect(await loadOnboardingStep('u2')).toBe(1);
+  });
+
+  it('falls back to step 1 for broken or out-of-range values', async () => {
+    await AsyncStorage.setItem('prefs.onboardingStep', '{not json');
+    expect(await loadOnboardingStep('u1')).toBe(1);
+    await AsyncStorage.setItem(
+      'prefs.onboardingStep',
+      JSON.stringify({ userId: 'u1', step: 9 }),
+    );
+    expect(await loadOnboardingStep('u1')).toBe(1);
+  });
+
+  it('clears the saved step', async () => {
+    await saveOnboardingStep('u1', 4);
+    await clearOnboardingStep();
+    expect(await loadOnboardingStep('u1')).toBe(1);
+  });
 });

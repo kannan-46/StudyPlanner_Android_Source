@@ -6,7 +6,9 @@ import { Banner } from '../../shared/ui/Banner';
 import { Button } from '../../shared/ui/Button';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
 import { useTheme } from '../../shared/ui/ThemeProvider';
+import { formatClockTime } from '../../shared/lib/format';
 import { useAppForeground } from '../../shared/lib/useAppForeground';
+import { uses24HourClock } from '../../native/config';
 import {
   configureReminders,
   getReminderStatus,
@@ -75,6 +77,12 @@ function PermissionRow({
   );
 }
 
+/**
+ * A request that comes back this fast was refused without a dialog: Android
+ * stops asking after the user said "Don't allow" (twice on Android 13+).
+ */
+const NO_DIALOG_MS = 600;
+
 export function RemindersStep() {
   const { colors, radius, spacing } = useTheme();
   const navigation = useNavigation();
@@ -85,15 +93,21 @@ export function RemindersStep() {
   const time = timeEdit ?? meQ.data?.settings?.reminderTime ?? '08:00';
   const enabled = enabledEdit ?? meQ.data?.settings?.dailyReminder ?? true;
   const [pickerOpen, setPickerOpen] = useState(false);
+  // null until the first check finishes: no "Not allowed" before we know.
   const [status, setStatus] = useState<ReminderStatus | null>(null);
+  // After one refusal, Allow goes straight to the app's notification settings.
+  const [notifDenied, setNotifDenied] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<ReminderStatus | null> => {
     try {
-      setStatus(await getReminderStatus());
+      const s = await getReminderStatus();
+      if (s) setStatus(s);
+      return s;
     } catch {
-      setStatus(null);
+      // Keep the last known status rather than showing a false alarm.
+      return null;
     }
   }, []);
   useEffect(() => {
@@ -103,14 +117,28 @@ export function RemindersStep() {
 
   const notifOk = status?.notificationsEnabled ?? false;
   const alarmOk = status?.exactAlarmsAllowed ?? false;
-  const missing = !(notifOk && alarmOk);
+  const missing = enabled && status !== null && !(notifOk && alarmOk);
 
   async function allowNotifications() {
-    try {
-      await requestNotificationPermission();
-    } finally {
-      await refresh();
+    if (notifDenied) {
+      await openReminderSettings('notifications');
+      return;
     }
+    const started = Date.now();
+    let granted = false;
+    try {
+      granted = await requestNotificationPermission();
+    } catch {
+      granted = false;
+    }
+    const now = await refresh();
+    if (granted && now?.notificationsEnabled !== false) return;
+    if (Date.now() - started < NO_DIALOG_MS || granted) {
+      // No dialog was shown (or the app's notifications are switched off):
+      // only Settings can turn them on now.
+      await openReminderSettings('notifications');
+    }
+    setNotifDenied(true);
   }
 
   async function next() {
@@ -138,6 +166,7 @@ export function RemindersStep() {
   }
 
   const [hh, mm] = time.split(':').map(Number);
+  const shownTime = formatClockTime(time, uses24HourClock());
   return (
     <StepShell step={3} title="Daily reminder">
       <View
@@ -159,9 +188,13 @@ export function RemindersStep() {
           onValueChange={setEnabledEdit}
         />
       </View>
+      <Text style={{ color: colors.muted, marginBottom: spacing.xs }}>
+        Remind me at
+      </Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Reminder time"
+        accessibilityLabel={`Remind me at ${shownTime}`}
+        accessibilityHint="Opens a clock to change the time"
         onPress={() => setPickerOpen(true)}
         style={{
           minHeight: 48,
@@ -174,13 +207,13 @@ export function RemindersStep() {
           marginBottom: spacing.lg,
         }}
       >
-        <Text style={{ color: colors.text, fontSize: 16 }}>{time}</Text>
+        <Text style={{ color: colors.text, fontSize: 16 }}>{shownTime}</Text>
       </Pressable>
       {pickerOpen ? (
         <DateTimePicker
+          // No is24Hour: the clock follows the phone's 12/24-hour setting.
           value={new Date(2000, 0, 1, hh, mm)}
           mode="time"
-          is24Hour
           onChange={(e, d) => {
             setPickerOpen(Platform.OS === 'ios');
             if (e.type === 'set' && d) {
@@ -190,32 +223,42 @@ export function RemindersStep() {
         />
       ) : null}
 
-      <Text style={{ color: colors.muted, marginBottom: spacing.xs }}>
-        For reminders to arrive on time
-      </Text>
-      <PermissionRow
-        label="Notifications"
-        ok={notifOk}
-        action="Allow"
-        onPress={allowNotifications}
-      />
-      <PermissionRow
-        label="Exact alarms"
-        ok={alarmOk}
-        action="Allow"
-        onPress={() => openReminderSettings('exactAlarm')}
-      />
+      {enabled && status !== null ? (
+        <>
+          <Text style={{ color: colors.muted, marginBottom: spacing.xs }}>
+            So we can remind you to revise on time, please allow:
+          </Text>
+          <PermissionRow
+            label="Notifications"
+            ok={notifOk}
+            action={notifDenied ? 'Open settings' : 'Allow'}
+            onPress={allowNotifications}
+          />
+          <PermissionRow
+            label="Alarms & reminders"
+            ok={alarmOk}
+            action="Allow"
+            onPress={() => openReminderSettings('exactAlarm')}
+          />
+        </>
+      ) : null}
       {missing ? (
         <View style={{ marginVertical: spacing.md }}>
           <Banner
             tone="warning"
-            text="Some permissions are missing, so reminders may not appear on time. You can fix this later in Settings."
+            text="Without these, reminders may not appear on time. You can change this later in Settings."
           />
         </View>
       ) : null}
       {error ? <ErrorRetry error={error} onRetry={next} /> : null}
       <View style={{ marginTop: spacing.md }}>
-        <Button title="Next" onPress={next} loading={saving} />
+        <Button
+          title="Next"
+          onPress={next}
+          loading={saving}
+          // Wait for the saved time, so it is never replaced by the default.
+          disabled={meQ.isPending}
+        />
       </View>
     </StepShell>
   );

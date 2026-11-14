@@ -11,6 +11,7 @@ import { Dialog } from '../../shared/ui/Dialog';
 import { Screen } from '../../shared/ui/Screen';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useAuth } from '../auth/AuthProvider';
+import { OnboardingProgressContext } from './progress';
 
 export const TOTAL_STEPS = 4;
 
@@ -35,6 +36,13 @@ export function StepShell({
   const [askLeave, setAskLeave] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const first = step === 1;
+  const reached = useContext(OnboardingProgressContext);
+
+  // Remember how far setup got, so a relaunch resumes here.
+  useEffect(() => {
+    if (!navigation || navigation.isFocused()) reached(step);
+    return navigation?.addListener('focus', () => reached(step));
+  }, [navigation, reached, step]);
 
   // Step 1 is the bottom of the stack: Android back would close the app.
   useEffect(() => {

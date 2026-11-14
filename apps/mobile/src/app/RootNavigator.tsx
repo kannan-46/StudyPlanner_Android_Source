@@ -10,7 +10,7 @@ import {
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { useAuth } from '../features/auth/AuthProvider';
 import { SignInScreen } from '../features/auth/SignInScreen';
-import { OnboardingNavigator } from '../features/onboarding/OnboardingNavigator';
+import { OnboardingFlow } from '../features/onboarding/OnboardingNavigator';
 import { TopicFormScreen } from '../features/topics/TopicFormScreen';
 import { TopicDetailScreen } from '../features/topics/TopicDetailScreen';
 import { ReminderHealthScreen } from '../features/settings/ReminderHealthScreen';
@@ -83,7 +83,7 @@ function RootScreens() {
   if (state.status === 'loading') return <Splash />;
   if (state.status === 'signedOut') return <SignInScreen />;
   if (state.user.onboardingCompletedAt === null) {
-    return <OnboardingNavigator />;
+    return <OnboardingFlow userId={state.user.id} />;
   }
   return (
     <Stack.Navigator

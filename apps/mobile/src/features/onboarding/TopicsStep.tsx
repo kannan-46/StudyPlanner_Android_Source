@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
 import type { TopicView } from '@planner/shared';
 import { formatDate } from '../../shared/lib/format';
+import { clearOnboardingStep } from '../../shared/lib/localPrefs';
 import { Button } from '../../shared/ui/Button';
 import { Dialog } from '../../shared/ui/Dialog';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
@@ -69,6 +70,7 @@ export function TopicsStep() {
         if (!saved) return;
       }
       await updateMe.mutateAsync({ onboardingCompleted: true });
+      clearOnboardingStep();
       await refreshUser();
     } catch (e) {
       setError(e);

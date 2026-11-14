@@ -3,6 +3,7 @@ package com.surgicalstudyplanner.app
 import android.app.UiModeManager
 import android.content.Context
 import android.os.Build
+import android.text.format.DateFormat
 import androidx.appcompat.app.AppCompatDelegate
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -14,6 +15,8 @@ class AppConfigModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
     override fun getConstants(): Map<String, Any> = mapOf(
         "API_BASE_URL" to BuildConfig.API_BASE_URL,
         "GOOGLE_WEB_CLIENT_ID" to BuildConfig.GOOGLE_WEB_CLIENT_ID,
+        // The phone's 12/24-hour clock setting, so times show the same way.
+        "IS_24_HOUR_CLOCK" to DateFormat.is24HourFormat(reactApplicationContext),
     )
 
     /**

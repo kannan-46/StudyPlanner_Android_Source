@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { Platform, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
   DEFAULT_SETTINGS,
@@ -33,6 +33,8 @@ export function IntervalsStep() {
   const meQ = useMe();
   const updateMe = useUpdateMe();
   const [edited, setEdited] = useState<string | null>(null);
+  // Errors wait until the user leaves the field or taps Next, never mid-typing.
+  const [touched, setTouched] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
 
@@ -42,17 +44,24 @@ export function IntervalsStep() {
   const text = edited ?? initial;
   const parsed = parse(text);
 
+  // While typing, keep showing the last valid preview instead of blanking it.
+  const lastValid = useRef<number[] | undefined>(undefined);
+  if (parsed.value) lastValid.current = parsed.value;
+  const shown = parsed.value ?? (touched ? undefined : lastValid.current);
   const preview = useMemo(() => {
-    if (!parsed.value) return [];
+    if (!shown) return [];
     const today = localToday();
-    return createSchedule(today, parsed.value, () => 'p').revisions.map(r => ({
+    return createSchedule(today, shown, () => 'p').revisions.map(r => ({
       step: r.step,
       date: formatDate(r.dueOn, today),
     }));
-  }, [parsed.value]);
+  }, [shown]);
 
   async function next() {
-    if (!parsed.value) return;
+    if (!parsed.value) {
+      setTouched(true);
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -74,10 +83,19 @@ export function IntervalsStep() {
       <TextField
         label="Intervals (days)"
         value={text}
-        onChangeText={setEdited}
-        error={parsed.error}
-        keyboardType="numbers-and-punctuation"
+        onChangeText={t => {
+          setEdited(t);
+          setTouched(false);
+        }}
+        onBlur={() => setTouched(true)}
+        error={touched ? parsed.error : undefined}
+        keyboardType={
+          Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'
+        }
       />
+      <Text style={{ color: colors.muted, marginBottom: spacing.md }}>
+        Separate the days with commas or spaces, like 4, 7, 15
+      </Text>
       {preview.length > 0 ? (
         <View testID="interval-preview" style={{ marginBottom: spacing.lg }}>
           <Text style={{ color: colors.muted, marginBottom: spacing.xs }}>
@@ -95,12 +113,7 @@ export function IntervalsStep() {
         </View>
       ) : null}
       {error ? <ErrorRetry error={error} onRetry={next} /> : null}
-      <Button
-        title="Next"
-        onPress={next}
-        loading={saving}
-        disabled={!parsed.value}
-      />
+      <Button title="Next" onPress={next} loading={saving} />
     </StepShell>
   );
 }
