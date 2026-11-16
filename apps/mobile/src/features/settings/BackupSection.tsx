@@ -12,6 +12,7 @@ import { useTheme } from '../../shared/ui/ThemeProvider';
 import { canRetry, isSessionEndedError } from '../../shared/api/errors';
 import { pickBackupFile } from '../../native/backupFiles';
 import { useExportToFile, useImportBackup } from '../backup/hooks';
+import { ExcelImport } from './ExcelImport';
 import {
   BACKUP_STATUS,
   TOO_LARGE_TEXT,
@@ -48,6 +49,7 @@ export function BackupSection() {
   const [picked, setPicked] = useState<Picked | null>(null);
   const [running, setRunning] = useState<Running>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [excelBusy, setExcelBusy] = useState(false);
 
   async function runExport() {
     setRunning('export');
@@ -189,22 +191,24 @@ export function BackupSection() {
   return (
     <View style={{ gap: spacing.sm }}>
       <Text style={{ color: colors.muted }}>
-        Save all your topics to a file, or restore from one.
+        Save all your topics to a file, or restore from one. You can also add
+        topics from an Excel sheet.
       </Text>
       <Button
         title="Export backup"
         variant="secondary"
         onPress={runExport}
         loading={running === 'export'}
-        disabled={running !== null}
+        disabled={running !== null || excelBusy}
       />
       <Button
         title="Import backup"
         variant="secondary"
         onPress={startImport}
         loading={running === 'import'}
-        disabled={running !== null}
+        disabled={running !== null || excelBusy}
       />
+      <ExcelImport disabled={running !== null} onBusyChange={setExcelBusy} />
       {status ? (
         <Text
           testID="backup-status"

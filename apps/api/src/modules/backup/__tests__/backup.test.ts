@@ -5,7 +5,9 @@ import { ObjectId } from 'mongodb';
 import {
   BACKUP_MAX_BODY_BYTES,
   BACKUP_MAX_UPLOAD_BYTES,
+  buildSpreadsheetBackup,
   createSchedule,
+  mapSpreadsheet,
   parseBackup,
 } from '@planner/shared';
 import { createApp } from '../../../app';
@@ -663,6 +665,89 @@ describe('backup', () => {
     expect(mocks[0].examId).toBeNull();
     const topics = (await request(app).get('/v1/topics').set(h)).body;
     expect(topics[0].examIds).toHaveLength(2);
+  });
+
+  it('merges topics from a spreadsheet once, linked to the one exam, without touching settings', async () => {
+    const app = build();
+    const a = await signIn(app, 'bk-xlsx');
+    const h = bearer(a.accessToken);
+    const mine = { intervals: [3, 9, 27], reminderTime: '21:00' };
+    await request(app).patch('/v1/me').set(h).send({ settings: mine });
+    const exam = (
+      await request(app)
+        .post('/v1/exams')
+        .set(h)
+        .send({ name: 'NEET SS', examDate: null })
+    ).body as { id: string };
+    const header = [
+      'Book',
+      'Topic',
+      'First-reading date',
+      'Interval (days)',
+      'Revision due date',
+      'Day',
+      'Status',
+      'Completion date',
+    ];
+    const rows = [header];
+    // 46342 is 2026-11-16; the second topic starts in the future.
+    [4, 7, 15].forEach((iv, i) => {
+      rows.push(['SRB', 'Thyroid', '46300', String(iv), '', '', '', '']);
+      rows.push([
+        'Pearls',
+        'Burns',
+        '46400',
+        String(iv),
+        '',
+        '',
+        i === 0 ? 'Done' : 'Pending',
+        i === 0 ? '46405' : '',
+      ]);
+    });
+    const mapped = mapSpreadsheet([{ name: 'Spaced Revision', rows }], {
+      today: '2026-11-16',
+    });
+    // Built twice, as two separate imports of the same file would be.
+    const file = () =>
+      buildSpreadsheetBackup(mapped.topics, {
+        exam: { name: 'neet ss', examDate: null },
+      });
+
+    const first = await importFile(app, a.accessToken, file());
+    expect(first.status).toBe(200);
+    expect(first.body.imported).toEqual({
+      exams: 0,
+      subjects: 2,
+      topics: 2,
+      mockTests: 0,
+    });
+    const again = await importFile(app, a.accessToken, file());
+    expect(again.status).toBe(200);
+    expect(again.body.imported.topics).toBe(0);
+    expect(again.body.skipped.topics).toBe(2);
+
+    const topics = (await request(app).get('/v1/topics').set(h)).body as {
+      name: string;
+      examIds: string[];
+      studiedOn: string;
+      intervals: number[];
+      revisions: { doneOn: string | null; dueOn: string }[];
+    }[];
+    expect(topics).toHaveLength(2);
+    const burns = topics.find(t => t.name === 'Burns');
+    expect(burns).toMatchObject({
+      studiedOn: '2027-01-13',
+      intervals: [4, 7, 15],
+      examIds: [exam.id],
+    });
+    expect(burns?.revisions.map(r => r.doneOn)).toEqual([
+      '2027-01-18',
+      null,
+      null,
+    ]);
+    expect((await request(app).get('/v1/exams').set(h)).body).toHaveLength(1);
+    const me = (await request(app).get('/v1/me').set(h)).body;
+    expect(me.settings).toMatchObject(mine);
   });
 
   it('requires auth', async () => {

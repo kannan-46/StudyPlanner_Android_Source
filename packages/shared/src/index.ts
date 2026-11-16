@@ -11,3 +11,4 @@ export * from './schemas/mockTests';
 export * from './schemas/agenda';
 export * from './types/views';
 export * from './schemas/backup';
+export * from './domain/spreadsheet';

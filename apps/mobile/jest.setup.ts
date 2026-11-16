@@ -40,4 +40,5 @@ NativeModules.Reminders = {
 NativeModules.BackupFiles = {
   exportBackup: jest.fn().mockResolvedValue(undefined),
   importBackup: jest.fn(),
+  pickSpreadsheet: jest.fn(),
 };
