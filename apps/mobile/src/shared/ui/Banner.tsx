@@ -1,27 +1,39 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useAnnounce } from './announce';
 import { useTheme } from './ThemeProvider';
+
+export type BannerTone = 'info' | 'warning' | 'error';
 
 export function Banner({
   tone,
   text,
   actionLabel,
   onAction,
+  announce = false,
 }: {
-  tone: 'info' | 'warning' | 'error';
+  tone: BannerTone;
   text: string;
   actionLabel?: string;
   onAction?: () => void;
+  /**
+   * Read the text aloud to TalkBack when the banner appears (and when its
+   * text changes). Use it for banners that show up on their own, like
+   * "No connection"; leave it off for banners that are always on a screen.
+   */
+  announce?: boolean;
 }) {
   const { colors, radius, spacing } = useTheme();
-  const c =
+  const { stroke, fill } =
     tone === 'error'
-      ? colors.danger
+      ? { stroke: colors.danger, fill: colors.softDanger }
       : tone === 'warning'
-      ? colors.muted
-      : colors.accent;
+      ? { stroke: colors.warning, fill: colors.softWarning }
+      : { stroke: colors.accent, fill: colors.softAccent };
+  useAnnounce(text, announce);
   return (
     <View
+      testID="banner"
       accessibilityRole="alert"
       style={{
         flexDirection: 'row',
@@ -29,8 +41,8 @@ export function Banner({
         alignItems: 'center',
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: c,
-        backgroundColor: colors.softAccent,
+        borderColor: stroke,
+        backgroundColor: fill,
         borderRadius: radius.md,
         paddingLeft: spacing.md,
         minHeight: 48,
@@ -56,7 +68,17 @@ export function Banner({
             justifyContent: 'center',
           }}
         >
-          <Text style={{ color: c, fontWeight: '700' }}>{actionLabel}</Text>
+          {/* The app's action colour, never muted (that reads as disabled). */}
+          <Text
+            testID="banner-action"
+            style={{
+              color: colors.accent,
+              fontWeight: '700',
+              textDecorationLine: 'underline',
+            }}
+          >
+            {actionLabel}
+          </Text>
         </Pressable>
       ) : null}
     </View>

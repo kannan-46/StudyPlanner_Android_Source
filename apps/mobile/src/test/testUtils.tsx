@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BackHandler } from 'react-native';
+import { AccessibilityInfo, BackHandler, Keyboard } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -156,5 +156,53 @@ export function mockHardwareBack() {
       spy.mockRestore();
       exitSpy.mockRestore();
     },
+  };
+}
+
+/**
+ * Pretends TalkBack is on (or off) for components that ask
+ * AccessibilityInfo.isScreenReaderEnabled(). Call before rendering; restore()
+ * puts the default mock back.
+ */
+export function mockScreenReader(on = true) {
+  // The jest preset already makes this a mock, and spyOn on a mock returns
+  // that same mock, so put its old behaviour back by hand.
+  const fn = jest.mocked(AccessibilityInfo.isScreenReaderEnabled);
+  const prev = fn.getMockImplementation();
+  fn.mockImplementation(() => Promise.resolve(on));
+  return {
+    restore: () =>
+      fn.mockImplementation(prev ?? (() => Promise.resolve(false))),
+  };
+}
+
+/**
+ * Captures Keyboard listeners so a test can open and close the keyboard.
+ * Call before rendering; show(height) fires keyboardDidShow, hide() fires
+ * keyboardDidHide (wrap both in act).
+ */
+export function mockKeyboard() {
+  type Handler = (e?: unknown) => void;
+  const handlers: Record<string, Handler[]> = {};
+  const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((
+    event: string,
+    handler: Handler,
+  ) => {
+    (handlers[event] ??= []).push(handler);
+    return {
+      remove: () => {
+        const list = handlers[event] ?? [];
+        const i = list.indexOf(handler);
+        if (i >= 0) list.splice(i, 1);
+      },
+    };
+  }) as unknown as typeof Keyboard.addListener);
+  const fire = (event: string, e?: unknown) =>
+    (handlers[event] ?? []).slice().forEach(h => h(e));
+  return {
+    show: (height: number) =>
+      fire('keyboardDidShow', { endCoordinates: { height } }),
+    hide: () => fire('keyboardDidHide'),
+    restore: () => spy.mockRestore(),
   };
 }

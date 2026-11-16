@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { ResponsiveContainer } from './responsive';
+import { ScrollToTopOnTabPress } from './ScrollToTopOnTabPress';
 import { UnderHeaderContext } from './StackHeader';
 import { useTheme } from './ThemeProvider';
 
@@ -30,11 +31,17 @@ export function Screen({
   children,
   scroll,
   fullWidth,
+  scrollToTopOnTabPress,
 }: {
   children: ReactNode;
   scroll?: boolean;
   /** Skip the centred max-width column (lists and master-detail). */
   fullWidth?: boolean;
+  /**
+   * With `scroll`, on a tab screen: tapping the tab you are already on
+   * scrolls back to the top.
+   */
+  scrollToTopOnTabPress?: boolean;
 }) {
   const { colors, spacing } = useTheme();
   // Under a stack header the header already clears the status bar.
@@ -65,8 +72,12 @@ export function Screen({
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={underHeader ? headerHeight : 0}
     >
+      {scrollToTopOnTabPress ? (
+        <ScrollToTopOnTabPress scrollRef={scrollRef} />
+      ) : null}
       <ScrollView
         ref={scrollRef}
+        testID="screen-scroll"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ flexGrow: 1, padding: spacing.lg }}
       >

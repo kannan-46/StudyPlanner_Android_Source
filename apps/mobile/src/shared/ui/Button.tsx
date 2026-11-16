@@ -2,7 +2,19 @@ import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useTheme } from './ThemeProvider';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'text';
+/**
+ * - primary: filled accent, the main action.
+ * - secondary: outlined, a second action.
+ * - danger: filled red; only for the final confirm inside a dialog.
+ * - dangerText: red text, no fill; for an inline Delete/Remove on a screen.
+ * - text: accent text, no fill.
+ */
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'danger'
+  | 'dangerText'
+  | 'text';
 
 export function Button({
   title,
@@ -11,6 +23,9 @@ export function Button({
   loading,
   disabled,
   disabledHint,
+  accessibilityLabel,
+  accessibilityHint,
+  testID,
 }: {
   title: string;
   onPress: () => void;
@@ -19,6 +34,10 @@ export function Button({
   disabled?: boolean;
   /** Short line under a disabled button that says what is missing. */
   disabledHint?: string;
+  /** Spoken name when the title alone is unclear (e.g. "Delete Mock A"). */
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  testID?: string;
 }) {
   const { colors, radius, spacing } = useTheme();
   const off = !!disabled || !!loading;
@@ -37,13 +56,19 @@ export function Button({
     ? colors.muted
     : filled
     ? colors.accentText
+    : variant === 'dangerText'
+    ? colors.danger
     : colors.accent;
   const hint = inactive && disabledHint ? disabledHint : undefined;
   const button = (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
+      // Always named after its title, so TalkBack says "Save, busy" while it
+      // spins instead of an unnamed button (and never keeps a stale "busy").
+      accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{ disabled: off, busy: !!loading }}
-      accessibilityHint={hint}
+      accessibilityHint={hint ?? accessibilityHint}
       disabled={off}
       onPress={onPress}
       style={{
@@ -54,7 +79,7 @@ export function Button({
         borderRadius: radius.md,
         backgroundColor: bg,
         borderWidth: variant === 'secondary' ? 1 : 0,
-        borderColor: colors.line,
+        borderColor: colors.border,
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'row',

@@ -90,8 +90,8 @@ it('update replaces its own snackbar and restarts the timer', async () => {
   expect(queryByText('Revision 1 done')).toBeNull();
 });
 
-it('update shows a timed-out snackbar again', async () => {
-  const { getByText } = await setup();
+it('update does nothing once its snackbar timed out (no pop-up again)', async () => {
+  const { queryByText, queryByTestId } = await setup();
   let id = 0;
   await act(async () => {
     id = api.show({ message: 'Saving' });
@@ -99,10 +99,13 @@ it('update shows a timed-out snackbar again', async () => {
   await act(async () => {
     jest.advanceTimersByTime(6000);
   });
+  let ok = true;
   await act(async () => {
-    api.update(id, { message: 'Saved' });
+    ok = api.update(id, { message: 'Saved' });
   });
-  expect(getByText('Saved')).toBeTruthy();
+  expect(ok).toBe(false);
+  expect(queryByText('Saved')).toBeNull();
+  expect(queryByTestId('snackbar')).toBeNull();
 });
 
 it('update does nothing once another snackbar replaced it', async () => {

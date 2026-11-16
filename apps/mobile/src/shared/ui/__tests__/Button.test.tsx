@@ -81,3 +81,64 @@ describe('Button', () => {
     ).toBeNull();
   });
 });
+
+describe('Button accessibility and danger styles', () => {
+  it('keeps its spoken name while busy', async () => {
+    await renderButton('light', { loading: true });
+    const button = screen.getByRole('button', { name: 'Finish' });
+    expect(button).toBeBusy();
+    expect(button).toBeDisabled();
+    expect(screen.getByTestId('button-spinner')).toBeOnTheScreen();
+  });
+
+  it('is named after its title when idle, or after an explicit label', async () => {
+    await renderButton('light');
+    expect(screen.getByRole('button', { name: 'Finish' })).not.toBeBusy();
+    await render(
+      <ThemeProvider mode="light">
+        <Button
+          title="Delete"
+          accessibilityLabel="Delete Mock A"
+          variant="dangerText"
+          onPress={() => {}}
+        />
+      </ThemeProvider>,
+    );
+    expect(screen.getByLabelText('Delete Mock A')).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['light', lightColors],
+    ['dark', darkColors],
+  ] as const)(
+    'dangerText is red text on no fill in %s mode',
+    async (mode, colors) => {
+      await render(
+        <ThemeProvider mode={mode}>
+          <Button title="Finish" variant="dangerText" onPress={() => {}} />
+        </ThemeProvider>,
+      );
+      expect(boxStyle().backgroundColor).toBe('transparent');
+      expect(boxStyle().borderWidth).toBe(0);
+      expect(textStyle().color).toBe(colors.danger);
+    },
+  );
+
+  it('a disabled dangerText button uses muted text', async () => {
+    await renderButton('light', { variant: 'dangerText', disabled: true });
+    expect(textStyle().color).toBe(lightColors.muted);
+  });
+
+  it('a busy dangerText button draws a red spinner', async () => {
+    await renderButton('dark', { variant: 'dangerText', loading: true });
+    expect(screen.getByTestId('button-spinner').props.color).toBe(
+      darkColors.danger,
+    );
+  });
+
+  it('outlined buttons use the 3:1 control border', async () => {
+    await renderButton('light', { variant: 'secondary' });
+    expect(boxStyle().borderColor).toBe(lightColors.border);
+    expect(boxStyle().borderWidth).toBe(1);
+  });
+});

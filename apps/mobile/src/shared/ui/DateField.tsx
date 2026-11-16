@@ -26,6 +26,7 @@ export function DateField({
   maximumDate,
   minimumDate,
   emptyText = 'No date set',
+  accessibilityHint = 'Opens a calendar to change the date',
 }: {
   label: string;
   /** null shows emptyText; the picker then opens on today (or the minimum). */
@@ -34,6 +35,7 @@ export function DateField({
   maximumDate?: LocalDate;
   minimumDate?: LocalDate;
   emptyText?: string;
+  accessibilityHint?: string;
 }) {
   const { colors, radius, spacing } = useTheme();
   const [open, setOpen] = useState(false);
@@ -47,21 +49,31 @@ export function DateField({
   let start = value ?? toLocalDate(new Date());
   if (minimumDate && start < minimumDate) start = minimumDate;
   if (maximumDate && start > maximumDate) start = maximumDate;
+  const shown = value ? formatDate(value) : emptyText;
   return (
     <View style={{ marginBottom: spacing.md }}>
-      <Text style={{ color: colors.muted, marginBottom: spacing.xs }}>
+      <Text
+        // The button below says the label and the date; don't read it twice.
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+        style={{ color: colors.muted, marginBottom: spacing.xs }}
+      >
         {label}
       </Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
+        // TalkBack: "Studied on, 10 Nov, button". The label stays exact so
+        // getByLabelText(label) keeps working.
+        accessibilityValue={{ text: shown }}
+        accessibilityHint={accessibilityHint}
         onPress={() => setOpen(true)}
         style={{
           minHeight: 48,
           justifyContent: 'center',
           paddingHorizontal: spacing.md,
           backgroundColor: colors.input,
-          borderColor: colors.line,
+          borderColor: colors.border,
           borderWidth: 1,
           borderRadius: radius.md,
         }}
@@ -69,7 +81,7 @@ export function DateField({
         <Text
           style={{ color: value ? colors.text : colors.muted, fontSize: 16 }}
         >
-          {value ? formatDate(value) : emptyText}
+          {shown}
         </Text>
       </Pressable>
       {open ? (

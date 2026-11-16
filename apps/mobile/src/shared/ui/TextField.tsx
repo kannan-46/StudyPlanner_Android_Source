@@ -35,7 +35,9 @@ export function TextField({
       </Text>
       <TextInput
         ref={ref}
-        accessibilityLabel={label}
+        // The error is part of the spoken name, so a focused invalid field
+        // reads "Topic name, Enter a topic name, edit box".
+        accessibilityLabel={error ? `${label}, ${error}` : label}
         placeholderTextColor={colors.muted}
         {...rest}
         value={value}
@@ -45,7 +47,7 @@ export function TextField({
           minHeight: multiline ? 96 : 48,
           color: colors.text,
           backgroundColor: colors.input,
-          borderColor: error ? colors.danger : colors.line,
+          borderColor: error ? colors.danger : colors.border,
           borderWidth: 1,
           borderRadius: radius.md,
           paddingHorizontal: spacing.md,
@@ -55,7 +57,10 @@ export function TextField({
         }}
       />
       {error ? (
-        <Text style={{ color: colors.danger, marginTop: spacing.xs }}>
+        <Text
+          testID="text-field-error"
+          style={{ color: colors.danger, marginTop: spacing.xs }}
+        >
           {error}
         </Text>
       ) : null}
