@@ -80,7 +80,12 @@ describe('ScheduleScreen', () => {
     expect(screen.getByText('Old topic')).toBeOnTheScreen();
     expect(screen.getByText('Hernia')).toBeOnTheScreen();
     expect(screen.getByText('Later topic')).toBeOnTheScreen();
-    expect(screen.getAllByText('Done')).toHaveLength(3);
+    // Upcoming rows only show when they are due.
+    expect(screen.getAllByText('Done')).toHaveLength(2);
+    expect(screen.getAllByText('Snooze 1 day')).toHaveLength(2);
+    expect(
+      screen.getByText(/^Revision 2 of 2 · In 5 days, /),
+    ).toBeOnTheScreen();
   });
 
   it('shows the empty state', async () => {

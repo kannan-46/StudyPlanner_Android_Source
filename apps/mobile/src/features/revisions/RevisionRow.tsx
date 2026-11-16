@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   addDays,
   localToday,
+  type AgendaItem,
   maxDate,
   type LocalDate,
   type RevisionView,
@@ -32,7 +33,23 @@ export type RevisionRowProps = {
   onOpenTopic?: () => void;
   /** The local date the row's status is worded against; defaults to now. */
   today?: LocalDate;
+  /** The agenda entry this row shows (Home, Schedule); Undo restores it. */
+  agendaItem?: AgendaItem;
 };
+
+/** "Revision 1 done · next on 19 Nov", once the server has saved it. */
+function doneMessage(step: number, saved: unknown, today: LocalDate): string {
+  const base = `Revision ${step} done`;
+  const t = saved as TopicView | undefined;
+  if (!t || !Array.isArray(t.revisions)) return base;
+  if (t.status === 'completed' || t.nextDueOn === null) {
+    return `${base} · all revisions done`;
+  }
+  if (typeof t.nextDueOn !== 'string') return base;
+  return t.nextDueOn === today
+    ? `${base} · next today`
+    : `${base} · next on ${formatDate(t.nextDueOn, today)}`;
+}
 
 /** Errors worth trying again: no connection or a server-side failure. */
 function canRetry(e: unknown): boolean {
@@ -48,6 +65,7 @@ export function RevisionRow({
   total,
   onOpenTopic,
   today: todayProp,
+  agendaItem,
 }: RevisionRowProps) {
   const { colors, spacing } = useTheme();
   const snackbar = useSnackbar();
@@ -80,25 +98,41 @@ export function RevisionRow({
     if (conflict) invalidateTopicData(qc, topicId).catch(() => {});
   };
 
-  const runUndo = async () => {
+  /** `afterDone`: the Done being taken back, if it may not be saved yet. */
+  const runUndo = async (afterDone?: Promise<unknown>) => {
     try {
-      await undo.mutateAsync(vars);
+      await undo.mutateAsync({ ...vars, restore: agendaItem, afterDone });
       snackbar.show({ message: `Revision ${step} restored` });
     } catch (e) {
       fail(e);
     }
   };
 
-  // Optimistic: the row updates and the snackbar shows at once. Its Undo
-  // appears only once the server has saved the Done, so it can't race it.
+  // Optimistic: the row updates and the snackbar, with Undo, shows at once.
+  // An Undo tapped before the Done is saved waits for it (same topic scope)
+  // and sends nothing if the Done fails. Once saved, the snackbar names the
+  // next revision's date.
   const onDone = async () => {
-    const message = `Revision ${step} done`;
-    const id = snackbar.show({ message });
+    const now = localToday();
+    let undone = false;
+    const saving = complete.mutateAsync({ ...vars, doneOn: now });
+    const undoThis = () => {
+      undone = true;
+      runUndo(saving);
+    };
+    const action = { actionLabel: 'Undo', onAction: undoThis };
+    const id = snackbar.show({ message: `Revision ${step} done`, ...action });
     try {
-      await complete.mutateAsync({ ...vars, doneOn: localToday() });
-      snackbar.update(id, { message, actionLabel: 'Undo', onAction: runUndo });
+      const saved = await saving;
+      if (!undone) {
+        snackbar.update(id, {
+          message: doneMessage(step, saved, now),
+          ...action,
+        });
+      }
     } catch (e) {
-      fail(e, onDone);
+      // Already taken back: the Undo reports the outcome.
+      if (!undone) fail(e, onDone);
     }
   };
 
@@ -190,7 +224,7 @@ export function RevisionRow({
           <Button
             title="Undo"
             variant="secondary"
-            onPress={runUndo}
+            onPress={() => runUndo()}
             loading={undo.isPending}
             disabled={complete.isPending || snooze.isPending}
           />

@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { addDays, localToday, type AgendaItem } from '@planner/shared';
 import { HomeScreen } from '../HomeScreen';
+import { formatDate } from '../../../shared/lib/format';
 import {
   ID,
   cleanupClients,
@@ -97,7 +98,9 @@ describe('HomeScreen', () => {
     expect(await screen.findByText('NEET SS in 42 days')).toBeOnTheScreen();
     expect(await screen.findByText('Topic 7')).toBeOnTheScreen();
     expect(screen.getByText('Topic 8')).toBeOnTheScreen();
-    expect(screen.getAllByText('Done')).toHaveLength(13);
+    // Overdue and today only: nothing coming up can be marked done here.
+    expect(screen.getAllByText('Done')).toHaveLength(8);
+    expect(screen.getAllByText('Snooze 1 day')).toHaveLength(8);
     expect(screen.getByText('Topic 14')).toBeOnTheScreen();
     expect(screen.queryByText('Topic 15')).toBeNull();
   });
@@ -272,5 +275,98 @@ describe('HomeScreen', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('HomeScreen Done and Undo', () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>(r => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it('Coming up rows show the topic and date but no Done or Snooze', async () => {
+    await renderWithProviders(
+      <HomeScreen />,
+      setup([{ ...mk(4, 'upcoming', addDays(today, 1)), topicName: 'Test' }]),
+    );
+    expect(await screen.findByText('Test')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Revision 1 of 2 · Due tomorrow'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Done')).toBeNull();
+    expect(screen.queryByText('Snooze 1 day')).toBeNull();
+    await fireEvent.press(screen.getByText('Test'));
+    expect(mockNavigate).toHaveBeenCalledWith('TopicDetail', {
+      topicId: ID(204),
+    });
+  });
+
+  it('Done: row stays gone, Undo at once, next date once saved', async () => {
+    const next = addDays(today, 3);
+    const gate = deferred<unknown>();
+    let saved = false;
+    const row = mk(1, 'today', today);
+    const http = setup(() =>
+      saved
+        ? [
+            {
+              ...row,
+              revisionId: 'R1b',
+              step: 2,
+              dueOn: next,
+              bucket: 'upcoming',
+            },
+          ]
+        : [row],
+    );
+    http.post.mockImplementationOnce(() => gate.promise);
+    await renderWithProviders(<HomeScreen />, http);
+    expect(await screen.findByText('Topic 1')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Done'));
+    expect(screen.queryByText('Topic 1')).toBeNull();
+    expect(screen.getByText('Revision 1 done')).toBeOnTheScreen();
+    expect(screen.getByText('Undo')).toBeOnTheScreen();
+
+    await act(async () => {
+      saved = true;
+      gate.resolve({
+        ...topic({ id: row.topicId, name: 'Topic 1' }),
+        revisions: [
+          { id: 'R1', step: 1, dueOn: today, doneOn: today, dueOverride: null },
+          { id: 'R1b', step: 2, dueOn: next, doneOn: null, dueOverride: null },
+        ],
+        nextDueOn: next,
+      });
+    });
+    expect(
+      await screen.findByText(`Revision 1 done · next on ${formatDate(next)}`),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Undo')).toBeOnTheScreen();
+    // Back under Coming up with its next revision, not under Today.
+    expect(
+      await screen.findByText(/^Revision 2 of 2 · In 3 days, /),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Done')).toBeNull();
+  });
+
+  it('an Undo tapped before the Done is saved brings the row back', async () => {
+    const gate = deferred<unknown>();
+    const http = setup([mk(1, 'today', today)]);
+    http.post.mockImplementationOnce(() => gate.promise).mockResolvedValue({});
+    await renderWithProviders(<HomeScreen />, http);
+    expect(await screen.findByText('Topic 1')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Done'));
+    expect(screen.queryByText('Topic 1')).toBeNull();
+    await fireEvent.press(screen.getByText('Undo'));
+    expect(await screen.findByText('Topic 1')).toBeOnTheScreen();
+    expect(screen.getByText('Revision 1 of 2 · Due today')).toBeOnTheScreen();
+    expect(http.post).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve({}));
+    expect(await screen.findByText('Revision 1 restored')).toBeOnTheScreen();
+    expect(http.post.mock.calls[1]![0]).toMatch(/undo$/);
+    expect(screen.getByText('Topic 1')).toBeOnTheScreen();
   });
 });

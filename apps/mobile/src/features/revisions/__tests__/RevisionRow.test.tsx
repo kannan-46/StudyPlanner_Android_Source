@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { addDays, localToday, type RevisionView } from '@planner/shared';
 import { RevisionRow } from '../RevisionRow';
 import { ApiError } from '../../../shared/api/errors';
+import { formatDate } from '../../../shared/lib/format';
 import {
   cleanupClients,
   makeHttp,
@@ -77,17 +78,70 @@ describe('RevisionRow', () => {
     expect(await screen.findByText('Revision 2 restored')).toBeOnTheScreen();
   });
 
-  it('Done shows the snackbar at once; Undo appears once the server saves', async () => {
+  it('Done shows the snackbar with Undo at once, then the next date', async () => {
     const http = makeHttp();
     const gate = deferred<unknown>();
     http.post.mockReturnValueOnce(gate.promise);
     await renderWithProviders(row(), http);
     await fireEvent.press(screen.getByText('Done'));
     expect(screen.getByText('Revision 2 done')).toBeOnTheScreen();
-    expect(screen.queryByText('Undo')).toBeNull();
-    await act(async () => gate.resolve({}));
-    expect(await screen.findByText('Undo')).toBeOnTheScreen();
-    expect(screen.getByText('Revision 2 done')).toBeOnTheScreen();
+    expect(screen.getByText('Undo')).toBeOnTheScreen();
+    const next = addDays(today, 3);
+    await act(async () =>
+      gate.resolve({
+        revisions: [rev({ doneOn: today })],
+        nextDueOn: next,
+        status: 'active',
+      }),
+    );
+    expect(
+      await screen.findByText(`Revision 2 done · next on ${formatDate(next)}`),
+    ).toBeOnTheScreen();
+    expect(screen.getByText('Undo')).toBeOnTheScreen();
+  });
+
+  it('says so when the last revision is done', async () => {
+    const http = makeHttp();
+    http.post.mockResolvedValue({
+      revisions: [rev({ doneOn: today })],
+      nextDueOn: null,
+      status: 'completed',
+    });
+    await renderWithProviders(row(), http);
+    await fireEvent.press(screen.getByText('Done'));
+    expect(
+      await screen.findByText('Revision 2 done · all revisions done'),
+    ).toBeOnTheScreen();
+  });
+
+  it('an Undo tapped before the Done is saved waits for it', async () => {
+    const http = makeHttp();
+    const gate = deferred<unknown>();
+    http.post.mockReturnValueOnce(gate.promise).mockResolvedValue({});
+    await renderWithProviders(row(), http);
+    await fireEvent.press(screen.getByText('Done'));
+    await fireEvent.press(screen.getByText('Undo'));
+    expect(http.post).toHaveBeenCalledTimes(1);
+    expect(http.post.mock.calls[0]![0]).toMatch(/complete$/);
+    await act(async () => gate.resolve({ revisions: [], nextDueOn: today }));
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(2));
+    expect(http.post.mock.calls[1]![0]).toMatch(/undo$/);
+    expect(await screen.findByText('Revision 2 restored')).toBeOnTheScreen();
+    // The saved Done does not bring its snackbar back.
+    expect(screen.queryByText(/^Revision 2 done/)).toBeNull();
+  });
+
+  it('an early Undo of a Done that fails sends nothing more', async () => {
+    const http = makeHttp();
+    const gate = deferred<unknown>();
+    http.post.mockReturnValueOnce(gate.promise);
+    await renderWithProviders(row(), http);
+    await fireEvent.press(screen.getByText('Done'));
+    await fireEvent.press(screen.getByText('Undo'));
+    await act(async () => gate.reject(new ApiError('NETWORK', 0)));
+    expect(await screen.findByText('Revision 2 restored')).toBeOnTheScreen();
+    expect(http.post).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Retry')).toBeNull();
   });
 
   it('a failed Done replaces the snackbar with the error and Retry', async () => {
@@ -102,8 +156,9 @@ describe('RevisionRow', () => {
     ).toBeOnTheScreen();
     expect(screen.queryByText('Revision 2 done')).toBeNull();
     await fireEvent.press(screen.getByText('Retry'));
-    expect(await screen.findByText('Undo')).toBeOnTheScreen();
-    expect(http.post).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('Revision 2 done')).toBeOnTheScreen();
+    expect(screen.getByText('Undo')).toBeOnTheScreen();
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(2));
   });
 
   it('the row Undo stays disabled while Done is still being saved', async () => {
