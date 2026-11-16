@@ -160,10 +160,30 @@ describe('loadConfig', () => {
           GOOGLE_WEB_CLIENT_ID: base.GOOGLE_WEB_CLIENT_ID,
           LATEST_VERSION_CODE: '4.2.0',
         }),
-      ).toThrow(/Invalid environment: JWT_SECRET/);
+      ).toThrow(/^Invalid environment: JWT_SECRET$/);
       expect(() =>
         loadConfig({ ...base, MONGODB_URI: '', LATEST_VERSION_CODE: '6' }),
-      ).toThrow(/MONGODB_URI/);
+      ).toThrow(/^Invalid environment: MONGODB_URI$/);
+      // The required vars are checked before any update setting is parsed.
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it.each(['LATEST_VERSION_NAME', 'LATEST_VERSION_CODE'] as const)(
+      'falls back for a %s made only of spaces',
+      name => {
+        const c = loadConfig({ ...base, [name]: '   ' });
+        expect(c.appVersion).toEqual(DEFAULT_APP_VERSION);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+          `Ignoring invalid ${name}; using the default`,
+        );
+      },
+    );
+
+    it('quietly treats UPDATE_NOTES made only of spaces as no notes', () => {
+      const c = loadConfig({ ...base, UPDATE_NOTES: '   ' });
+      expect(c.appVersion.notes).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 });
