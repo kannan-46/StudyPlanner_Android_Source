@@ -2,11 +2,11 @@ import React, { useContext, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
 import type { TopicView } from '@planner/shared';
-import { formatDate } from '../../shared/lib/format';
 import { clearOnboardingStep } from '../../shared/lib/localPrefs';
 import { Button } from '../../shared/ui/Button';
 import { Dialog } from '../../shared/ui/Dialog';
 import { ErrorRetry } from '../../shared/ui/ErrorRetry';
+import { useResponsive } from '../../shared/ui/responsive';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useLeaveGuard } from '../../shared/ui/useLeaveGuard';
@@ -14,13 +14,29 @@ import { useAuth } from '../auth/AuthProvider';
 import { useUpdateMe } from '../me/hooks';
 import { useTopics } from '../topics/hooks';
 import { TopicForm, type TopicFormHandle } from '../topics/TopicForm';
+import { topicAddedMessage } from './messages';
 import { StepShell } from './StepShell';
 
 export const FINISH_HINT = 'Add at least one topic, or tap Skip for now';
 
-/** Asks "Discard changes?" before Back throws away a half-typed topic. */
-function LeaveGuard({ dirty }: { dirty: boolean }) {
-  return useLeaveGuard(dirty).dialog;
+/**
+ * Room left under Finish and Skip so they can scroll clear of the "added"
+ * snackbar (setup has no tab bar, so it sits where Skip ends). Sized for a
+ * three-line snackbar at the phone's text size.
+ */
+export function snackbarClearance(fontScale: number, gap: number): number {
+  const lines = 3;
+  const lineHeight = 20 * Math.max(1, fontScale);
+  // The snackbar's own vertical padding (4 + 8 above and below the text).
+  return Math.max(48, 24 + lines * lineHeight) + gap;
+}
+
+/**
+ * Asks "Discard changes?" before Back throws away a half-typed topic, and
+ * holds Back (without that warning) while a save is still going.
+ */
+function LeaveGuard({ dirty, saving }: { dirty: boolean; saving: boolean }) {
+  return useLeaveGuard(dirty, saving).dialog;
 }
 
 export function TopicsStep() {
@@ -43,16 +59,18 @@ export function TopicsStep() {
   const total = (baseline.current ?? 0) + added;
   const [error, setError] = useState<unknown>(null);
   const [finishing, setFinishing] = useState(false);
+  // "Save & add another" in flight: Back waits instead of warning "Discard".
+  const [topicSaving, setTopicSaving] = useState(false);
   const [askDiscard, setAskDiscard] = useState(false);
   const busy = useRef(false);
 
+  const { fontScale } = useResponsive();
+
   const onSaved = (t: TopicView) => {
     setAdded(n => n + 1);
-    snackbar.show({
-      message: `${t.name} added — first revision ${
-        t.nextDueOn ? formatDate(t.nextDueOn) : 'scheduled'
-      }`,
-    });
+    // A short line: a long name is cut, and a backlog topic studied weeks
+    // ago says it is due now instead of showing a past date.
+    snackbar.show({ message: topicAddedMessage(t.name, t.nextDueOn) });
   };
 
   /**
@@ -102,13 +120,17 @@ export function TopicsStep() {
         mode="create"
         compact
         clearNameOnSave
+        defaultExamIds="all"
         submitLabel="Save & add another"
         submitVariant="secondary"
         onSaved={onSaved}
         onDirtyChange={setDirty}
         onDraftChange={setHasDraft}
+        onSavingChange={setTopicSaving}
       />
-      {navigation ? <LeaveGuard dirty={dirty} /> : null}
+      {navigation ? (
+        <LeaveGuard dirty={dirty} saving={topicSaving || finishing} />
+      ) : null}
       {error ? <ErrorRetry error={error} onRetry={finish} /> : null}
       <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
         <Button
@@ -125,6 +147,10 @@ export function TopicsStep() {
           disabled={finishing}
         />
       </View>
+      <View
+        testID="snackbar-clearance"
+        style={{ height: snackbarClearance(fontScale, spacing.sm) }}
+      />
       <Dialog
         visible={askDiscard}
         title="Discard the topic you typed?"

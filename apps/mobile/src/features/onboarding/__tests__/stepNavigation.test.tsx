@@ -4,6 +4,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../../auth/AuthProvider';
 import { getReminderStatus } from '../../../native/reminders';
+import { STILL_SAVING_MESSAGE } from '../../../shared/ui/useLeaveGuard';
 import { OnboardingNavigator } from '../OnboardingNavigator';
 import {
   cleanupClients,
@@ -96,11 +97,54 @@ it('steps 2-4 have a Back button that returns to the step before', async () => {
   await waitFor(() => expect(screen.queryByText('Step 2 of 4')).toBeNull());
 });
 
-it('step 1 offers Sign out', async () => {
+it('step 1 offers "Use another account", which signs out', async () => {
   await renderFlow();
   await screen.findByText('Step 1 of 4');
-  await fireEvent.press(screen.getByRole('button', { name: 'Sign out' }));
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'Use another account' }),
+  );
   expect(signOut).toHaveBeenCalledTimes(1);
+});
+
+describe('signed-in account', () => {
+  const EMAIL = 'student.long.name@college.example.edu';
+  beforeEach(() => {
+    (useAuth as jest.Mock).mockReturnValue({
+      refreshUser: jest.fn(),
+      signOut,
+      state: {
+        status: 'signedIn',
+        user: { id: 'u1', email: EMAIL, name: 'Student' },
+      },
+    });
+  });
+
+  it('step 1 says which Google account is signed in', async () => {
+    await renderFlow();
+    await screen.findByText('Step 1 of 4');
+    expect(screen.getByText(`Signed in as ${EMAIL}`)).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Use another account' }),
+    ).toBeOnTheScreen();
+  });
+
+  it('the leave dialog names the account too', async () => {
+    await renderFlow();
+    await screen.findByText('Step 1 of 4');
+    await pressBack();
+    expect(
+      await screen.findByText(new RegExp(`You're signed in as ${EMAIL}\\.`)),
+    ).toBeOnTheScreen();
+  });
+
+  it('later steps do not repeat the account', async () => {
+    await renderFlow(2);
+    await screen.findByText('Step 2 of 4');
+    expect(screen.queryByText(/Signed in as/)).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Use another account' }),
+    ).toBeNull();
+  });
 });
 
 it('Android back on step 1 asks instead of closing the app', async () => {
@@ -156,9 +200,7 @@ it.each([3, 4])(
     await renderFlow(step);
     expect(await screen.findByText(`Step ${step} of 4`)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
-    expect(
-      await screen.findByText(`Step ${step - 1} of 4`),
-    ).toBeOnTheScreen();
+    expect(await screen.findByText(`Step ${step - 1} of 4`)).toBeOnTheScreen();
     await waitFor(() =>
       expect(screen.queryByText(`Step ${step} of 4`)).toBeNull(),
     );
@@ -210,5 +252,31 @@ describe('step 4 with a topic half typed', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByText('Step 3 of 4')).toBeOnTheScreen();
     expect(screen.queryByText('Discard changes?')).toBeNull();
+  });
+
+  it('Back waits (no "Discard changes?") while the topic is still saving', async () => {
+    const http = makeHttp();
+    let release!: () => void;
+    http.post.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          release = () => resolve(topic());
+        }),
+    );
+    await renderFlow(4, http);
+    await typeName();
+    await fireEvent.press(await screen.findByText('Anatomy'));
+    // Keep the save open: fireEvent would wait for the pending handler.
+    const saving = fireEvent.press(screen.getByText('Save & add another'));
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(1));
+    await pressBack();
+    expect(await screen.findByText(STILL_SAVING_MESSAGE)).toBeOnTheScreen();
+    expect(screen.queryByText('Discard changes?')).toBeNull();
+    expect(screen.getByText('Step 4 of 4')).toBeOnTheScreen();
+    await waitFor(() => {
+      release();
+      expect(screen.getByText('Added: 1 topic')).toBeOnTheScreen();
+    });
+    await saving;
   });
 });

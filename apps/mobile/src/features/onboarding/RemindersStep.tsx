@@ -29,14 +29,26 @@ function timezone(): string {
   }
 }
 
+/** Shown before the student has been asked: nothing has gone wrong yet. */
+export const NOT_ON_YET_TEXT = 'Not on yet';
+/** Shown only after a refusal (or a trip to Settings that changed nothing). */
+export const NOT_ALLOWED_TEXT = 'Not allowed';
+export const SKIP_PERMISSIONS_TEXT =
+  'You can skip this and turn reminders on later in Settings.';
+export const MISSING_PERMISSIONS_WARNING =
+  'Without these, reminders may not appear on time. You can change this later in Settings.';
+
 function PermissionRow({
   label,
   ok,
+  refused,
   action,
   onPress,
 }: {
   label: string;
   ok: boolean;
+  /** The student was asked and it is still off: red "Not allowed". */
+  refused: boolean;
   action: string;
   onPress: () => void;
 }) {
@@ -69,7 +81,9 @@ function PermissionRow({
             gap: spacing.sm,
           }}
         >
-          <Text style={{ color: colors.danger }}>Not allowed</Text>
+          <Text style={{ color: refused ? colors.danger : colors.muted }}>
+            {refused ? NOT_ALLOWED_TEXT : NOT_ON_YET_TEXT}
+          </Text>
           <Button title={action} variant="secondary" onPress={onPress} />
         </View>
       )}
@@ -97,6 +111,8 @@ export function RemindersStep() {
   const [status, setStatus] = useState<ReminderStatus | null>(null);
   // After one refusal, Allow goes straight to the app's notification settings.
   const [notifDenied, setNotifDenied] = useState(false);
+  // Set once the student went to the Alarms & reminders setting.
+  const [alarmTried, setAlarmTried] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
 
@@ -118,6 +134,10 @@ export function RemindersStep() {
   const notifOk = status?.notificationsEnabled ?? false;
   const alarmOk = status?.exactAlarmsAllowed ?? false;
   const missing = enabled && status !== null && !(notifOk && alarmOk);
+  // The warning waits until something was actually refused; before that a
+  // plain note says this step can be skipped.
+  const refusedMissing =
+    missing && ((notifDenied && !notifOk) || (alarmTried && !alarmOk));
 
   async function allowNotifications() {
     if (notifDenied) {
@@ -231,24 +251,30 @@ export function RemindersStep() {
           <PermissionRow
             label="Notifications"
             ok={notifOk}
+            refused={notifDenied}
             action={notifDenied ? 'Open settings' : 'Allow'}
             onPress={allowNotifications}
           />
           <PermissionRow
             label="Alarms & reminders"
             ok={alarmOk}
+            refused={alarmTried}
             action="Allow"
-            onPress={() => openReminderSettings('exactAlarm')}
+            onPress={() => {
+              setAlarmTried(true);
+              openReminderSettings('exactAlarm');
+            }}
           />
         </>
       ) : null}
-      {missing ? (
+      {refusedMissing ? (
         <View style={{ marginVertical: spacing.md }}>
-          <Banner
-            tone="warning"
-            text="Without these, reminders may not appear on time. You can change this later in Settings."
-          />
+          <Banner tone="warning" text={MISSING_PERMISSIONS_WARNING} />
         </View>
+      ) : missing ? (
+        <Text style={{ color: colors.muted, marginVertical: spacing.md }}>
+          {SKIP_PERMISSIONS_TEXT}
+        </Text>
       ) : null}
       {error ? <ErrorRetry error={error} onRetry={next} /> : null}
       <View style={{ marginTop: spacing.md }}>

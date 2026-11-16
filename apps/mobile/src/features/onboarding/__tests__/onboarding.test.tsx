@@ -1,6 +1,16 @@
 import React from 'react';
-import { AppState, NativeModules, useWindowDimensions } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import {
+  AppState,
+  NativeModules,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import {
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { addDays, localToday } from '@planner/shared';
 import { formatDate } from '../../../shared/lib/format';
@@ -19,6 +29,7 @@ import {
   cleanupClients,
   makeHttp,
   renderWithProviders,
+  subjects,
   topic,
 } from '../../../test/testUtils';
 
@@ -148,11 +159,73 @@ describe('ExamStep', () => {
   });
 });
 
+const findIntervalsField = () =>
+  screen.findByLabelText(/^Revision days \(after studying\)/);
+
 describe('IntervalsStep', () => {
+  it('words the numbers as days after studying and shows the real gaps', async () => {
+    await renderStep('Intervals');
+    const field = await findIntervalsField();
+    await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
+    expect(screen.getByText('When to revise')).toBeOnTheScreen();
+    expect(
+      screen.getByText(/days after studying when you want to revise/),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/gap/i)).toBeNull();
+    const today = localToday();
+    expect(screen.getByTestId('preview-1')).toHaveTextContent(
+      `Revision 1: ${formatDate(addDays(today, 4))} (4 days after studying)`,
+    );
+    expect(screen.getByTestId('preview-2')).toHaveTextContent(
+      `Revision 2: ${formatDate(addDays(today, 7))} (3 days after revision 1)`,
+    );
+    expect(screen.getByTestId('preview-3')).toHaveTextContent(
+      `Revision 3: ${formatDate(addDays(today, 15))} (8 days after revision 2)`,
+    );
+  });
+
+  it('uses a number keyboard on Android', async () => {
+    const restore = jest.replaceProperty(Platform, 'OS', 'android');
+    try {
+      await renderStep('Intervals');
+      expect((await findIntervalsField()).props.keyboardType).toBe('numeric');
+    } finally {
+      restore.restore();
+    }
+  });
+
+  it.each(['4.7.15', '4-7-15', '4/7/15', '4; 7; 15'])(
+    'accepts the same separators as the topic form: %s',
+    async typed => {
+      const http = makeHttp();
+      http.patch.mockResolvedValue({ settings: { intervals: [4, 7, 15] } });
+      await renderStep('Intervals', http);
+      const field = await findIntervalsField();
+      await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
+      await fireEvent.changeText(field, typed);
+      await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() =>
+        expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+          settings: { intervals: [4, 7, 15] },
+        }),
+      );
+      expect(await screen.findByText('Step 3 of 4')).toBeOnTheScreen();
+    },
+  );
+
+  it('says how to separate the days', async () => {
+    await renderStep('Intervals');
+    expect(
+      await screen.findByText(
+        'Separate the days with commas, spaces or dots, like 4, 7, 15',
+      ),
+    ).toBeOnTheScreen();
+  });
+
   it('rejects [4,4] only after leaving the field and previews [4,7,15] from today + 4', async () => {
     const http = makeHttp();
     await renderStep('Intervals', http);
-    const field = await screen.findByLabelText('Intervals (days)');
+    const field = await findIntervalsField();
     await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
     await fireEvent.changeText(field, '4, 4');
     // Still typing: no error yet, and the last good preview stays.
@@ -168,7 +241,9 @@ describe('IntervalsStep', () => {
     expect(screen.queryByText(/must increase/)).toBeNull();
     await fireEvent.changeText(field, '4, 7, 15');
     expect(screen.getByTestId('preview-1')).toHaveTextContent(
-      `Revision 1: ${formatDate(addDays(localToday(), 4))}`,
+      `Revision 1: ${formatDate(
+        addDays(localToday(), 4),
+      )} (4 days after studying)`,
     );
     expect(http.patch).not.toHaveBeenCalled();
   });
@@ -176,7 +251,7 @@ describe('IntervalsStep', () => {
   it('shows friendly errors when Next is tapped with bad gaps', async () => {
     const http = makeHttp();
     await renderStep('Intervals', http);
-    const field = await screen.findByLabelText('Intervals (days)');
+    const field = await findIntervalsField();
     await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
     await fireEvent.changeText(field, '4, 7, 1000');
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
@@ -197,7 +272,7 @@ describe('IntervalsStep', () => {
     const http = makeHttp();
     http.patch.mockResolvedValue({ settings: { intervals: [4, 7, 15] } });
     await renderStep('Intervals', http);
-    const field = await screen.findByLabelText('Intervals (days)');
+    const field = await findIntervalsField();
     await waitFor(() => expect(field.props.value).toBe('4, 7, 15'));
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
@@ -210,17 +285,50 @@ describe('IntervalsStep', () => {
 });
 
 describe('RemindersStep', () => {
-  it('shows Not allowed and requests notification permission', async () => {
+  it('opens neutral (no red "Not allowed", no warning) and requests notification permission', async () => {
     (requestNotificationPermission as jest.Mock).mockResolvedValue(true);
     await renderStep('Reminders');
-    expect(await screen.findByText('Not allowed')).toBeOnTheScreen();
-    expect(screen.getByText(/reminders may not appear/)).toBeOnTheScreen();
+    expect(await screen.findByText('Not on yet')).toBeOnTheScreen();
+    expect(screen.queryByText('Not allowed')).toBeNull();
+    expect(screen.queryByText(/reminders may not appear/)).toBeNull();
+    expect(
+      screen.getByText(
+        'You can skip this and turn reminders on later in Settings.',
+      ),
+    ).toBeOnTheScreen();
     (getReminderStatus as jest.Mock).mockResolvedValue(
       status({ notificationsEnabled: true }),
     );
     await fireEvent.press(screen.getByRole('button', { name: 'Allow' }));
     expect(requestNotificationPermission).toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByText('Not allowed')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Not on yet')).toBeNull());
+    expect(screen.getByLabelText('Notifications allowed')).toBeOnTheScreen();
+  });
+
+  it('shows red "Not allowed" and the warning only after a refusal', async () => {
+    (requestNotificationPermission as jest.Mock).mockResolvedValue(false);
+    await renderStep('Reminders');
+    await fireEvent.press(await screen.findByRole('button', { name: 'Allow' }));
+    expect(await screen.findByText('Not allowed')).toBeOnTheScreen();
+    expect(screen.getByText(/reminders may not appear/)).toBeOnTheScreen();
+    expect(
+      screen.queryByText(
+        'You can skip this and turn reminders on later in Settings.',
+      ),
+    ).toBeNull();
+  });
+
+  it('marks Alarms & reminders as not allowed after a trip to Settings that changed nothing', async () => {
+    (getReminderStatus as jest.Mock).mockResolvedValue(
+      status({ notificationsEnabled: true, exactAlarmsAllowed: false }),
+    );
+    await renderStep('Reminders');
+    expect(await screen.findByText('Not on yet')).toBeOnTheScreen();
+    expect(screen.queryByText(/reminders may not appear/)).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Allow' }));
+    expect(openReminderSettings).toHaveBeenCalledWith('exactAlarm');
+    expect(await screen.findByText('Not allowed')).toBeOnTheScreen();
+    expect(screen.getByText(/reminders may not appear/)).toBeOnTheScreen();
   });
 
   it('shows only Notifications and Alarms & reminders, never a Battery row', async () => {
@@ -263,7 +371,7 @@ describe('RemindersStep', () => {
     const http = makeHttp();
     http.patch.mockResolvedValue({});
     await renderStep('Reminders', http);
-    await screen.findByText('Not allowed');
+    await screen.findByText('Not on yet');
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
       expect(http.patch).toHaveBeenCalledWith('/v1/me', {
@@ -285,7 +393,8 @@ describe('TopicsStep', () => {
 
   it('disables Finish with a hint until a topic is added, then completes onboarding', async () => {
     const http = makeHttp();
-    http.post.mockResolvedValue(topic({ name: 'Thyroid' }));
+    const due = addDays(localToday(), 4);
+    http.post.mockResolvedValue(topic({ name: 'Thyroid', nextDueOn: due }));
     http.patch.mockResolvedValue({});
     await renderWithProviders(<TopicsStep />, http);
     expect(await screen.findByText('Added: 0 topics')).toBeOnTheScreen();
@@ -298,9 +407,7 @@ describe('TopicsStep', () => {
     await fireEvent.press(screen.getByText('Save & add another'));
     expect(await screen.findByText('Added: 1 topic')).toBeOnTheScreen();
     expect(
-      screen.getByText(
-        `Thyroid added — first revision ${formatDate('2026-11-12')}`,
-      ),
+      screen.getByText(`Thyroid added — first revision ${formatDate(due)}`),
     ).toBeOnTheScreen();
     expect(
       screen.queryByText('Add at least one topic, or tap Skip for now'),
@@ -317,6 +424,56 @@ describe('TopicsStep', () => {
       }),
     );
     await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+  });
+
+  const addOne = async (saved: ReturnType<typeof topic>) => {
+    const http = makeHttp();
+    http.post.mockResolvedValue(saved);
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Added: 0 topics');
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'x');
+    await fireEvent.press(await screen.findByText('Anatomy'));
+    await fireEvent.press(screen.getByText('Save & add another'));
+    await screen.findByText('Added: 1 topic');
+    // The form has finished its save once the name is cleared.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Topic name').props.value).toBe(''),
+    );
+  };
+
+  it('says a backlog topic is due now instead of showing a past date', async () => {
+    const past = addDays(localToday(), -27);
+    await addOne(topic({ name: 'Pathology', nextDueOn: past }));
+    expect(
+      screen.getByText('Pathology added — first revision is due now'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(new RegExp(formatDate(past)))).toBeNull();
+  });
+
+  it('says "due today" when the first revision is today', async () => {
+    await addOne(topic({ name: 'Renal', nextDueOn: localToday() }));
+    expect(
+      screen.getByText('Renal added — first revision is due today'),
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the added message short for a long topic name', async () => {
+    const long = 'Anatomy of the brachial plexus and its branches in detail';
+    await addOne(topic({ name: long, nextDueOn: addDays(localToday(), 1) }));
+    expect(
+      screen.getByText(
+        'Anatomy of the brachial plexus and its… added — first revision tomorrow',
+      ),
+    ).toBeOnTheScreen();
+  });
+
+  it('leaves room under Finish and Skip so the snackbar never covers them', async () => {
+    mockDims(320, 2);
+    await renderWithProviders(<TopicsStep />, makeHttp());
+    await screen.findByText('Added: 0 topics');
+    const height = screen.getByTestId('snackbar-clearance').props.style.height;
+    // A three-line snackbar at double text size, plus a gap.
+    expect(height).toBeGreaterThanOrEqual(24 + 3 * 40);
   });
 
   it('Finish saves the typed topic first, then completes onboarding', async () => {
@@ -409,6 +566,32 @@ describe('TopicsStep', () => {
     await waitFor(() => expect(refreshUser).toHaveBeenCalled());
   });
 
+  it('starts a topic linked to every exam chosen in setup', async () => {
+    const http = makeHttp();
+    const two = [
+      { id: ID(11), name: 'MS General Surgery', examDate: null },
+      { id: ID(12), name: 'NEET SS', examDate: null },
+    ];
+    http.get.mockImplementation(async (path: string) => {
+      if (path === '/v1/exams') return two;
+      if (path === '/v1/subjects') return subjects;
+      if (path === '/v1/me') return { settings: { intervals: [4, 7, 15] } };
+      return [];
+    });
+    http.post.mockResolvedValue(topic({ name: 'Thyroid' }));
+    await renderWithProviders(<TopicsStep />, http);
+    await screen.findByText('Added: 0 topics');
+    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Thyroid');
+    await fireEvent.press(await screen.findByText('Anatomy'));
+    await fireEvent.press(screen.getByText('Save & add another'));
+    await waitFor(() =>
+      expect(http.post).toHaveBeenCalledWith(
+        '/v1/topics',
+        expect.objectContaining({ examIds: [ID(11), ID(12)] }),
+      ),
+    );
+  });
+
   it('centres the step in a 720 dp column on large screens', async () => {
     mockDims(1000);
     await renderWithProviders(<TopicsStep />, makeHttp());
@@ -428,7 +611,9 @@ describe('relaunch-safe setup', () => {
     await fireEvent.press(await screen.findByText('NEET SS'));
     await fireEvent.press(screen.getByText('MS General Surgery'));
     mockPickDate = new Date(2027, 0, 15);
-    await fireEvent.press(screen.getByText('Set date for NEET SS'));
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Set date for NEET SS' }),
+    );
     await fireEvent.press(screen.getByTestId('date-picker'));
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() => expect(http.post).toHaveBeenCalledTimes(2));
@@ -454,10 +639,14 @@ describe('relaunch-safe setup', () => {
     );
     await fireEvent.press(screen.getByText('NEET SS'));
     mockPickDate = new Date(2027, 0, 15);
-    await fireEvent.press(screen.getByText('Set date for NEET SS'));
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Set date for NEET SS' }),
+    );
     await fireEvent.press(screen.getByTestId('date-picker'));
     mockPickDate = new Date(2027, 5, 2);
-    await fireEvent.press(screen.getByText('Set date for MS General Surgery'));
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Set date for MS General Surgery' }),
+    );
     await fireEvent.press(screen.getAllByTestId('date-picker')[0]);
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
@@ -590,7 +779,9 @@ describe('ExamStep typed, unticked and past exams', () => {
       ).toBe(true),
     );
     await fireEvent.press(screen.getByText('NEET SS'));
-    await fireEvent.press(screen.getByText('MS General Surgery'));
+    await fireEvent.press(
+      screen.getByRole('checkbox', { name: 'MS General Surgery' }),
+    );
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
   };
 
@@ -630,15 +821,46 @@ describe('ExamStep typed, unticked and past exams', () => {
     http.get.mockImplementation(async () => []);
     await renderStep('Exams', http);
     await fireEvent.press(await screen.findByText('NEET SS'));
-    await fireEvent.press(screen.getByText('Set date for NEET SS'));
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Set date for NEET SS' }),
+    );
     const today = localToday();
     expect(toLocalDate(mockPickerProps.minimumDate as Date)).toBe(today);
     expect(toLocalDate(mockPickerProps.value as Date)).toBe(today);
     mockPickDate = fromLocalDate(addDays(today, -30));
     await fireEvent.press(screen.getByTestId('date-picker'));
+    const row = within(screen.getByTestId('exam-date-row-neet ss'));
+    expect(row.getByText('No date set')).toBeOnTheScreen();
     expect(
-      screen.getByText('NEET SS exam date (optional): none'),
+      screen.getByRole('button', { name: 'Set date for NEET SS' }),
     ).toBeOnTheScreen();
+  });
+
+  it('shows each exam name once with short date buttons', async () => {
+    const http = makeHttp();
+    http.get.mockImplementation(async () => []);
+    await renderStep('Exams', http);
+    await fireEvent.press(await screen.findByText('NEET SS'));
+    expect(screen.getByText('Exam dates are optional')).toBeOnTheScreen();
+    const row = within(screen.getByTestId('exam-date-row-neet ss'));
+    expect(row.getByText('NEET SS')).toBeOnTheScreen();
+    expect(row.getByText('No date set')).toBeOnTheScreen();
+    expect(row.getByText('Set date')).toBeOnTheScreen();
+    expect(screen.queryByText(/exam date \(optional\)/)).toBeNull();
+    expect(screen.queryByText('Set date for NEET SS')).toBeNull();
+
+    mockPickDate = new Date(2027, 0, 15);
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Set date for NEET SS' }),
+    );
+    await fireEvent.press(screen.getByTestId('date-picker'));
+    expect(row.getByText(formatDate('2027-01-15'))).toBeOnTheScreen();
+    expect(row.getByText('Change date')).toBeOnTheScreen();
+    expect(row.getByText('Clear')).toBeOnTheScreen();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Clear date for NEET SS' }),
+    );
+    expect(row.getByText('No date set')).toBeOnTheScreen();
   });
 
   it('opens the picker at today when a saved exam date has passed', async () => {
@@ -655,7 +877,9 @@ describe('ExamStep typed, unticked and past exams', () => {
         : [],
     );
     await renderStep('Exams', http);
-    await fireEvent.press(await screen.findByText('Change date for NEET SS'));
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Change date for NEET SS' }),
+    );
     expect(toLocalDate(mockPickerProps.value as Date)).toBe(localToday());
   });
 });
@@ -693,28 +917,35 @@ describe('RemindersStep permissions and time', () => {
     await renderStep('Reminders');
     await screen.findByText('Remind me at');
     expect(screen.queryByText('Not allowed')).toBeNull();
+    expect(screen.queryByText('Not on yet')).toBeNull();
     expect(screen.queryByText(/reminders may not appear/)).toBeNull();
   });
 
   it('keeps showing the last status if a re-check fails', async () => {
     await renderStep('Reminders');
-    expect(await screen.findByText('Not allowed')).toBeOnTheScreen();
+    expect(await screen.findByText('Not on yet')).toBeOnTheScreen();
     (getReminderStatus as jest.Mock).mockRejectedValue(new Error('x'));
     (requestNotificationPermission as jest.Mock).mockResolvedValue(true);
     await fireEvent.press(screen.getByRole('button', { name: 'Allow' }));
-    expect(screen.getByText('Not allowed')).toBeOnTheScreen();
+    expect(screen.getByText('Not on yet')).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Notifications allowed')).toBeNull();
   });
 
   it('hides the permission rows and warning when the daily reminder is off', async () => {
+    (requestNotificationPermission as jest.Mock).mockResolvedValue(false);
     await renderStep('Reminders');
+    await fireEvent.press(await screen.findByRole('button', { name: 'Allow' }));
     expect(await screen.findByText('Not allowed')).toBeOnTheScreen();
+    expect(screen.getByText(/reminders may not appear/)).toBeOnTheScreen();
     await fireEvent(
       screen.getByLabelText('Daily reminder'),
       'valueChange',
       false,
     );
     expect(screen.queryByText('Not allowed')).toBeNull();
+    expect(screen.queryByText('Not on yet')).toBeNull();
     expect(screen.queryByText(/reminders may not appear/)).toBeNull();
+    expect(screen.queryByText(/You can skip this/)).toBeNull();
   });
 
   it('explains permissions in plain words and labels the time', async () => {

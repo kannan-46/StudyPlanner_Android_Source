@@ -21,6 +21,8 @@ import {
 import { StepShell } from './StepShell';
 
 const QUICK_PICKS = ['NEET SS', 'MS General Surgery'];
+export const NO_DATE_TEXT = 'No date set';
+export const EXAM_DATES_HINT = 'Exam dates are optional';
 
 /** Optional date for one exam; nothing is saved until the user picks one. */
 function ExamDateRow({
@@ -35,31 +37,51 @@ function ExamDateRow({
   const { colors, spacing } = useTheme();
   const [open, setOpen] = useState(false);
   const today = localToday();
+  // The name shows once; the short buttons carry it for TalkBack only.
   return (
     <View
-      style={{
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: spacing.sm,
-        marginBottom: spacing.sm,
-      }}
+      testID={`exam-date-row-${nameKey(name)}`}
+      style={{ marginBottom: spacing.md }}
     >
-      <Text style={{ color: colors.text, flexShrink: 1 }}>
-        {`${name} exam date (optional): ${value ? formatDate(value) : 'none'}`}
+      <Text
+        style={{
+          color: colors.text,
+          fontSize: 16,
+          fontWeight: '600',
+          flexShrink: 1,
+        }}
+      >
+        {name}
       </Text>
-      <Button
-        title={value ? `Change date for ${name}` : `Set date for ${name}`}
-        variant="secondary"
-        onPress={() => setOpen(true)}
-      />
-      {value ? (
+      <Text style={{ color: colors.muted, flexShrink: 1 }}>
+        {value ? formatDate(value) : NO_DATE_TEXT}
+      </Text>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: spacing.sm,
+          marginTop: spacing.xs,
+        }}
+      >
         <Button
-          title={`Clear date for ${name}`}
-          variant="text"
-          onPress={() => onChange(null)}
+          title={value ? 'Change date' : 'Set date'}
+          accessibilityLabel={
+            value ? `Change date for ${name}` : `Set date for ${name}`
+          }
+          variant="secondary"
+          onPress={() => setOpen(true)}
         />
-      ) : null}
+        {value ? (
+          <Button
+            title="Clear"
+            accessibilityLabel={`Clear date for ${name}`}
+            variant="text"
+            onPress={() => onChange(null)}
+          />
+        ) : null}
+      </View>
       {open ? (
         <DateTimePicker
           // Exams are in the future: today is the earliest choice.
@@ -212,6 +234,7 @@ export function ExamStep() {
     <StepShell step={1} title="Which exams are you preparing for?">
       <ChipSelect
         multiple
+        groupLabel="Exams"
         options={names.map(n => ({ value: n, label: n }))}
         value={selected}
         onChange={v => setSelected(v as string[])}
@@ -234,6 +257,9 @@ export function ExamStep() {
       </View>
       {selected.length > 0 ? (
         <View style={{ marginTop: spacing.lg }}>
+          <Text style={{ color: colors.muted, marginBottom: spacing.sm }}>
+            {EXAM_DATES_HINT}
+          </Text>
           {selected.map(name => (
             <ExamDateRow
               key={nameKey(name)}

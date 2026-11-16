@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import {
   DEFAULT_SETTINGS,
   createSchedule,
-  intervalsSchema,
+  daysBetween,
   localToday,
 } from '@planner/shared';
 import { Button } from '../../shared/ui/Button';
@@ -13,19 +13,16 @@ import { TextField } from '../../shared/ui/TextField';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { formatDate } from '../../shared/lib/format';
 import { useMe, useUpdateMe } from '../me/hooks';
+import {
+  INTERVALS_HINT,
+  INTERVALS_LABEL,
+  parseIntervalsText,
+} from './intervalsText';
 import { StepShell } from './StepShell';
 
-function parse(text: string): { value?: number[]; error?: string } {
-  const parts = text.split(/[\s,]+/).filter(Boolean);
-  const nums = parts.map(Number);
-  if (parts.length === 0 || nums.some(n => !Number.isInteger(n))) {
-    return { error: 'Use whole numbers like 4, 7, 15' };
-  }
-  const r = intervalsSchema.safeParse(nums);
-  return r.success
-    ? { value: r.data }
-    : { error: r.error.issues[0]?.message ?? 'Invalid intervals' };
-}
+export const INTERVALS_TITLE = 'When to revise';
+
+const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
 export function IntervalsStep() {
   const { colors, spacing } = useTheme();
@@ -42,7 +39,7 @@ export function IntervalsStep() {
     meQ.data?.settings?.intervals ?? DEFAULT_SETTINGS.intervals
   ).join(', ');
   const text = edited ?? initial;
-  const parsed = parse(text);
+  const parsed = parseIntervalsText(text);
 
   // While typing, keep showing the last valid preview instead of blanking it.
   const lastValid = useRef<number[] | undefined>(undefined);
@@ -51,10 +48,18 @@ export function IntervalsStep() {
   const preview = useMemo(() => {
     if (!shown) return [];
     const today = localToday();
-    return createSchedule(today, shown, () => 'p').revisions.map(r => ({
-      step: r.step,
-      date: formatDate(r.dueOn, today),
-    }));
+    let prev = today;
+    return createSchedule(today, shown, () => 'p').revisions.map(r => {
+      // The real gap from the step before, so "4, 7" reads as day 4 and
+      // day 7 after studying (3 days apart), not 4 then 7 more days.
+      const gap = daysBetween(prev, r.dueOn);
+      const after =
+        r.step === 1
+          ? `${days(gap)} after studying`
+          : `${days(gap)} after revision ${r.step - 1}`;
+      prev = r.dueOn;
+      return { step: r.step, date: formatDate(r.dueOn, today), after };
+    });
   }, [shown]);
 
   async function next() {
@@ -75,13 +80,14 @@ export function IntervalsStep() {
   }
 
   return (
-    <StepShell step={2} title="Revision gaps">
+    <StepShell step={2} title={INTERVALS_TITLE}>
       <Text style={{ color: colors.text, marginBottom: spacing.lg }}>
-        After you study a topic, we remind you to revise it after these many
-        days. Each gap grows so it sticks.
+        Enter the days after studying when you want to revise. 4, 7, 15 means
+        day 4, day 7 and day 15 after you study a topic. If you revise late, the
+        later revisions move forward.
       </Text>
       <TextField
-        label="Intervals (days)"
+        label={INTERVALS_LABEL}
         value={text}
         onChangeText={t => {
           setEdited(t);
@@ -89,12 +95,13 @@ export function IntervalsStep() {
         }}
         onBlur={() => setTouched(true)}
         error={touched ? parsed.error : undefined}
+        // A number keyboard; dots, dashes and spaces work as separators too.
         keyboardType={
-          Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'
+          Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'
         }
       />
       <Text style={{ color: colors.muted, marginBottom: spacing.md }}>
-        Separate the days with commas or spaces, like 4, 7, 15
+        {INTERVALS_HINT}
       </Text>
       {preview.length > 0 ? (
         <View testID="interval-preview" style={{ marginBottom: spacing.lg }}>
@@ -107,7 +114,8 @@ export function IntervalsStep() {
               testID={`preview-${p.step}`}
               style={{ color: colors.text, paddingVertical: spacing.xs }}
             >
-              {`Revision ${p.step}: ${p.date}`}
+              {`Revision ${p.step}: ${p.date} `}
+              <Text style={{ color: colors.muted }}>{`(${p.after})`}</Text>
             </Text>
           ))}
         </View>

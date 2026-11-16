@@ -14,11 +14,13 @@ import { useAuth } from '../auth/AuthProvider';
 import { OnboardingProgressContext } from './progress';
 
 export const TOTAL_STEPS = 4;
+export const SWITCH_ACCOUNT_LABEL = 'Use another account';
 
 /**
  * Common frame: scrollable, centred column, "Step N of 4" and a title.
- * Steps 2-4 get a Back button. Step 1 offers Sign out (wrong Google account),
- * and the Android back button there asks before leaving setup.
+ * Steps 2-4 get a Back button. Step 1 says which Google account is signed in
+ * and offers "Use another account" (signs out, for a wrong account pick), and
+ * the Android back button there asks before leaving setup.
  */
 export function StepShell({
   step,
@@ -32,7 +34,9 @@ export function StepShell({
   const { colors, spacing } = useTheme();
   // Optional, so a step can also be shown on its own.
   const navigation = useContext(NavigationContext);
-  const { signOut } = useAuth();
+  // `state` may be missing where a test mocks only part of useAuth.
+  const { signOut, state } = useAuth();
+  const email = state?.status === 'signedIn' ? state.user.email : undefined;
   const [askLeave, setAskLeave] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const first = step === 1;
@@ -103,13 +107,26 @@ export function StepShell({
         </Text>
         {first ? (
           <Button
-            title="Sign out"
+            title={SWITCH_ACCOUNT_LABEL}
             variant="text"
             onPress={doSignOut}
             loading={signingOut}
+            accessibilityHint="Signs you out so you can pick a different Google account"
           />
         ) : null}
       </View>
+      {first && email ? (
+        <Text
+          testID="signed-in-as"
+          style={{
+            color: colors.muted,
+            flexShrink: 1,
+            marginBottom: spacing.sm,
+          }}
+        >
+          {`Signed in as ${email}`}
+        </Text>
+      ) : null}
       <Text
         accessibilityRole="header"
         style={{
@@ -145,8 +162,9 @@ export function StepShell({
         }
       >
         <Text style={{ color: colors.text }}>
-          You can finish setting up the next time you open the app. To use a
-          different Google account, sign out.
+          {`You can finish setting up the next time you open the app.${
+            email ? ` You're signed in as ${email}.` : ''
+          } To use a different Google account, sign out.`}
         </Text>
       </Dialog>
     </Screen>
