@@ -26,5 +26,14 @@ export async function ensureIndexes(db: Db): Promise<void> {
       },
     ),
     db.collection('mockTests').createIndex({ userId: 1, takenOn: -1 }),
+    // Imported mock tests remember their backup record, so the same record
+    // is never imported twice, even by two imports running at once.
+    db.collection('mockTests').createIndex(
+      { userId: 1, sourceId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { sourceId: { $type: 'string' } },
+      },
+    ),
   ]);
 }

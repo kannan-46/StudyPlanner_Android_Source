@@ -11,6 +11,11 @@ export interface MockTestDoc {
   examId: ObjectId | null;
   notes: string;
   createdAt: Date;
+  /**
+   * Set on imported mock tests: the backup record they came from (a v1 file
+   * id or a 'legacy:' key). A later merge of the same file skips them.
+   */
+  sourceId?: string;
 }
 
 export type MockTestPatch = Partial<

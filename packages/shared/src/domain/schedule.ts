@@ -134,11 +134,28 @@ export function reconcileSchedule(
       ? { ...existing, dueOverride: null }
       : { ...existing };
   });
-  return rebuildSchedule({
-    studiedOn: next.studiedOn,
-    intervals: next.intervals,
-    revisions,
-  });
+  const build = () =>
+    rebuildSchedule({
+      studiedOn: next.studiedOn,
+      intervals: next.intervals,
+      revisions,
+    });
+  let result = build();
+  // A snooze survives the edit while it is still later than the recomputed
+  // date (a snooze never moves a revision earlier). Steps are restored in
+  // order and rebuilt each time, so later steps count from the kept date.
+  for (let i = 0; i < revisions.length; i++) {
+    const rev = revisions[i] as RevisionState;
+    if (rev.doneOn !== null) continue;
+    const old = current.revisions.find(r => r.step === rev.step)?.dueOverride;
+    const rebuilt = result.revisions.find(r => r.step === rev.step);
+    if (!old || !rebuilt || !isLocalDate(old)) continue;
+    if (compareDates(old, rebuilt.dueOn) > 0) {
+      revisions[i] = { ...rev, dueOverride: old };
+      result = build();
+    }
+  }
+  return result;
 }
 
 function bySteps(input: ScheduleInput): RevisionState[] {

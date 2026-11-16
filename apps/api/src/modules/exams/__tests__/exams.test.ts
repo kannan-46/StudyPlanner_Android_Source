@@ -129,4 +129,52 @@ describe('exams', () => {
     const topic = await db.collection('topics').findOne({ _id: insertedId });
     expect(topic?.examIds).toEqual([id2]);
   });
+
+  it('delete clears the exam from mock tests, only for that exam and user', async () => {
+    const { app } = build();
+    const a = await signIn(app, 'ex-mock');
+    const b = await signIn(app, 'ex-mock-b');
+    const h = bearer(a.accessToken);
+    const e1 = await request(app).post('/v1/exams').set(h).send({ name: 'E1' });
+    const e2 = await request(app).post('/v1/exams').set(h).send({ name: 'E2' });
+    const mock = (examId: string, title: string) =>
+      request(app).post('/v1/mock-tests').set(h).send({
+        title,
+        takenOn: '2026-11-02',
+        score: 1,
+        maxScore: 2,
+        examId,
+      });
+    const m1 = await mock(e1.body.id, 'GT 1');
+    const m2 = await mock(e2.body.id, 'GT 2');
+    const hb = bearer(b.accessToken);
+    const eb = await request(app)
+      .post('/v1/exams')
+      .set(hb)
+      .send({ name: 'E1' });
+    const mb = await request(app).post('/v1/mock-tests').set(hb).send({
+      title: 'Other',
+      takenOn: '2026-11-02',
+      score: 1,
+      maxScore: 2,
+      examId: eb.body.id,
+    });
+
+    await request(app).delete(`/v1/exams/${e1.body.id}`).set(h);
+    const list = (await request(app).get('/v1/mock-tests').set(h)).body as {
+      id: string;
+      examId: string | null;
+    }[];
+    expect(list.find(m => m.id === m1.body.id)?.examId).toBeNull();
+    expect(list.find(m => m.id === m2.body.id)?.examId).toBe(e2.body.id);
+    const theirs = (await request(app).get('/v1/mock-tests').set(hb)).body;
+    expect(theirs[0].id).toBe(mb.body.id);
+    expect(theirs[0].examId).toBe(eb.body.id);
+    // The test can still be edited.
+    const edit = await request(app)
+      .patch(`/v1/mock-tests/${m1.body.id}`)
+      .set(h)
+      .send({ score: 2, examId: null });
+    expect(edit.status).toBe(200);
+  });
 });

@@ -118,6 +118,62 @@ describe('mock tests', () => {
     expect(clear.body.examId).toBeNull();
   });
 
+  it('heals a link to a deleted exam on list and on save', async () => {
+    const { app, deps } = build();
+    const a = await signIn(app, 'mt-stale');
+    const h = bearer(a.accessToken);
+    const ok = await request(app).post('/v1/mock-tests').set(h).send(body);
+    // Older data: the exam was deleted but the link stayed.
+    const gone = new ObjectId();
+    const db = await deps.getDb();
+    await db
+      .collection('mockTests')
+      .updateOne({ _id: new ObjectId(ok.body.id) }, { $set: { examId: gone } });
+    const list = await request(app).get('/v1/mock-tests').set(h);
+    expect(list.body[0].examId).toBeNull();
+
+    // A form that still sends the stale id saves and the link is dropped.
+    const stale = await request(app)
+      .patch(`/v1/mock-tests/${ok.body.id}`)
+      .set(h)
+      .send({ score: 150, examId: gone.toHexString() });
+    expect(stale.status).toBe(200);
+    expect(stale.body.examId).toBeNull();
+    expect(stale.body.score).toBe(150);
+    const doc = await db
+      .collection('mockTests')
+      .findOne({ _id: new ObjectId(ok.body.id) });
+    expect(doc?.examId).toBeNull();
+
+    // An unknown id that was never stored is still refused.
+    const other = await request(app)
+      .patch(`/v1/mock-tests/${ok.body.id}`)
+      .set(h)
+      .send({ examId: new ObjectId().toHexString() });
+    expect(other.status).toBe(400);
+    expect(other.body.error.details[0].path).toEqual(['examId']);
+  });
+
+  it('a save without examId drops a link to a deleted exam', async () => {
+    const { app, deps } = build();
+    const a = await signIn(app, 'mt-stale-2');
+    const h = bearer(a.accessToken);
+    const ok = await request(app).post('/v1/mock-tests').set(h).send(body);
+    const db = await deps.getDb();
+    await db
+      .collection('mockTests')
+      .updateOne(
+        { _id: new ObjectId(ok.body.id) },
+        { $set: { examId: new ObjectId() } },
+      );
+    const res = await request(app)
+      .patch(`/v1/mock-tests/${ok.body.id}`)
+      .set(h)
+      .send({ notes: 'n' });
+    expect(res.status).toBe(200);
+    expect(res.body.examId).toBeNull();
+  });
+
   it('returns 404 for other users and unknown ids', async () => {
     const { app } = build();
     const a = await signIn(app, 'mt-x-a');

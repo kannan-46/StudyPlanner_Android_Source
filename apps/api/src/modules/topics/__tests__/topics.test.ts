@@ -286,6 +286,42 @@ describe('topics', () => {
     expect(res.body.revisions[0].dueOn).toBe('2026-11-25');
   });
 
+  it('keeps a snooze that is still later when studiedOn or intervals change', async () => {
+    const { app, deps, h, subjectId } = await setup('tp-snooze-keep');
+    const t = await request(app)
+      .post('/v1/topics')
+      .set(h)
+      .send({ name: 'K', subjectId, studiedOn: '2026-11-01' });
+    await seedDone(deps, t.body.id, ['2026-11-05']);
+    // R2 (due 11-08) snoozed to 11-17.
+    const db = await deps.getDb();
+    await db.collection('topics').updateOne(
+      { _id: new ObjectId(t.body.id) },
+      {
+        $set: {
+          'revisions.1.dueOverride': '2026-11-17',
+          'revisions.1.dueOn': '2026-11-17',
+          nextDueOn: '2026-11-17',
+        },
+      },
+    );
+    const more = await request(app)
+      .patch(`/v1/topics/${t.body.id}`)
+      .set(h)
+      .send({ intervals: [4, 7, 15, 30, 60, 90, 180] });
+    expect(more.status).toBe(200);
+    expect(more.body.revisions[1].dueOverride).toBe('2026-11-17');
+    expect(more.body.nextDueOn).toBe('2026-11-17');
+
+    const earlier = await request(app)
+      .patch(`/v1/topics/${t.body.id}`)
+      .set(h)
+      .send({ studiedOn: '2026-10-31' });
+    expect(earlier.status).toBe(200);
+    expect(earlier.body.revisions[1].dueOverride).toBe('2026-11-17');
+    expect(earlier.body.revisions[1].dueOn).toBe('2026-11-17');
+  });
+
   it('deletes a topic', async () => {
     const { app, h, subjectId } = await setup('tp-del');
     const t = await request(app)

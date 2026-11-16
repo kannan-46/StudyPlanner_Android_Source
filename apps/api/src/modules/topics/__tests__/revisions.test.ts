@@ -96,6 +96,43 @@ describe('revisions', () => {
     expect(res.body.revisions[0].doneOn).toBeNull();
   });
 
+  it('redoes an undone revision with its original past date', async () => {
+    const { app, h, revs, base } = await setup('rv-redo');
+    const done = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[0]!.id}/complete`,
+      { doneOn: '2026-11-03' },
+    );
+    expect(done.status).toBe(200);
+    await post(app, h, `${base}/revisions/${revs[1]!.id}/complete`, {
+      doneOn: '2026-11-06',
+    });
+    const afterR2 = (await request(app).get(base).set(h)).body
+      .revisions as Rev[];
+    // Undo R2 by mistake, then put it back with the date it was done on
+    // (in the past, but not before R1's done date).
+    await post(app, h, `${base}/revisions/${revs[1]!.id}/undo`);
+    const redo = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[1]!.id}/complete`,
+      { doneOn: '2026-11-06' },
+    );
+    expect(redo.status).toBe(200);
+    expect(redo.body.revisions).toEqual(afterR2);
+    // Still never before the previous revision's done date.
+    await post(app, h, `${base}/revisions/${revs[1]!.id}/undo`);
+    const tooEarly = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[1]!.id}/complete`,
+      { doneOn: '2026-11-02' },
+    );
+    expect(tooEarly.status).toBe(400);
+    expect(tooEarly.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
   it('rejects undo of a non-latest completion', async () => {
     const { app, h, revs, base } = await setup('rv-undo-order');
     await post(app, h, `${base}/revisions/${revs[0]!.id}/complete`, {

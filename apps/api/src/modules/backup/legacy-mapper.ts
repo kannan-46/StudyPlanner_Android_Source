@@ -26,6 +26,8 @@ export interface ImportPlan {
     notes: string;
     /** Indexed by step - 1; length equals intervals.length. */
     revisions: { doneOn: LocalDate | null; dueOverride: LocalDate | null }[];
+    /** Old-app text was cut to this app's limits. */
+    shortened?: boolean;
   }[];
   mockTests: {
     title: string;
@@ -33,9 +35,15 @@ export interface ImportPlan {
     score: number;
     maxScore: number;
     examName: string | null;
-    /** v1 file id; on merge it matches an existing mock test _id. */
+    /**
+     * Stable key of the backup record: the v1 sourceId or file id, or a
+     * 'legacy:' key. On merge it is matched against existing mock test _ids
+     * and stored sourceIds, so the same record is never imported twice.
+     */
     sourceId?: string;
     notes: string;
+    /** The old-app note was cut to 1,000 characters. */
+    shortened?: boolean;
   }[];
 }
 
@@ -81,8 +89,25 @@ function mapRevisions(
   });
 }
 
-function mapMock(m: LegacyMock): ImportPlan['mockTests'][number] {
+/**
+ * Old mock test ids are not checked for uniqueness, so a repeated id gets
+ * its occurrence number. The key stays the same for the same file.
+ */
+function legacyMockKeys(mocks: LegacyMock[]): string[] {
+  const seen = new Map<string, number>();
+  return mocks.map(m => {
+    const n = (seen.get(m.id) ?? 0) + 1;
+    seen.set(m.id, n);
+    return n === 1 ? `legacy:${m.id}` : `legacy:${m.id}#${n}`;
+  });
+}
+
+function mapMock(
+  m: LegacyMock,
+  sourceId: string,
+): ImportPlan['mockTests'][number] {
   return {
+    sourceId,
     title: `${m.exam} mock`,
     takenOn: m.date,
     score: m.score,
@@ -121,7 +146,9 @@ export function mapLegacyBackup(
       revisions: mapRevisions(t, intervals),
     };
   });
-  const mockTests = (data.tests ?? data.mockTests ?? []).map(mapMock);
+  const legacyMocks = data.tests ?? data.mockTests ?? [];
+  const keys = legacyMockKeys(legacyMocks);
+  const mockTests = legacyMocks.map((m, i) => mapMock(m, keys[i] as string));
 
   const examNames = new Set<string>();
   topics.forEach(t => t.examNames.forEach(n => examNames.add(n)));

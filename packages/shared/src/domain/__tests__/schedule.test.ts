@@ -222,7 +222,7 @@ describe('schedule', () => {
     expect(r.revisions.map(x => x.id)).toEqual(['r1', 'r2']);
   });
 
-  it('reconcile with a new studiedOn recomputes pending dates and clears overrides', () => {
+  it('reconcile with a new studiedOn keeps a snooze that is still later', () => {
     const a = completeRevision(input0(), 'r1', '2026-11-05');
     const b = snoozeRevision(s_input(a), 'r2', '2026-11-10', 3);
     expect(b.revisions[1]!.dueOverride).toBe('2026-11-13');
@@ -231,13 +231,52 @@ describe('schedule', () => {
       { studiedOn: '2026-11-02', intervals: [4, 7, 15, 30] },
       ids(),
     );
-    expect(r.revisions.every(x => x.dueOverride === null)).toBe(true);
+    // R2 would be 11-05 + 3 = 11-08 without the snooze; 11-13 is later.
+    expect(r.revisions[1]!.dueOverride).toBe('2026-11-13');
     expect(dues(r)).toEqual([
       '2026-11-06',
-      '2026-11-08',
-      '2026-11-16',
-      '2026-12-01',
+      '2026-11-13',
+      '2026-11-21',
+      '2026-12-06',
     ]);
-    expect(r.nextDueOn).toBe('2026-11-08');
+    expect(r.nextDueOn).toBe('2026-11-13');
+  });
+
+  it('reconcile keeps a snooze when a later interval is added', () => {
+    const a = completeRevision(input0(), 'r1', '2026-11-05');
+    const b = snoozeRevision(s_input(a), 'r2', '2026-11-16', 1);
+    expect(b.revisions[1]!.dueOverride).toBe('2026-11-17');
+    const r = reconcileSchedule(
+      s_input(b),
+      { studiedOn: '2026-11-01', intervals: [4, 7, 15, 30, 60] },
+      ids(),
+    );
+    expect(r.revisions[1]!.dueOverride).toBe('2026-11-17');
+    expect(r.nextDueOn).toBe('2026-11-17');
+    expect(r.revisions[2]!.dueOn).toBe('2026-11-25');
+  });
+
+  it('reconcile drops a snooze the new schedule has moved past', () => {
+    const a = completeRevision(input0(), 'r1', '2026-11-05');
+    const b = snoozeRevision(s_input(a), 'r2', '2026-11-07', 1);
+    expect(b.revisions[1]!.dueOverride).toBe('2026-11-09');
+    // A bigger gap puts R2 at 11-05 + 10 = 11-15, later than the snooze.
+    const r = reconcileSchedule(
+      s_input(b),
+      { studiedOn: '2026-11-01', intervals: [4, 14, 15, 30] },
+      ids(),
+    );
+    expect(r.revisions[1]!.dueOverride).toBeNull();
+    expect(r.revisions[1]!.dueOn).toBe('2026-11-15');
+  });
+
+  it('reconcile never keeps an override on a done revision or a new step', () => {
+    const a = completeRevision(input0(), 'r1', '2026-11-05');
+    const r = reconcileSchedule(
+      s_input(a),
+      { studiedOn: '2026-11-01', intervals: [4, 7, 15, 30, 60] },
+      () => 'new',
+    );
+    expect(r.revisions.every(x => x.dueOverride === null)).toBe(true);
   });
 });

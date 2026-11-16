@@ -1,6 +1,12 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { ZodError } from 'zod';
-import { ERROR_CODES, ScheduleError, type ErrorCode } from '@planner/shared';
+import {
+  badJsonProblem,
+  ERROR_CODES,
+  ScheduleError,
+  tooLargeProblem,
+  type ErrorCode,
+} from '@planner/shared';
 import { AppError } from '../errors/app-error';
 
 function body(
@@ -46,17 +52,49 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   }
   const type = (err as { type?: unknown } | null)?.type;
   if (type === 'entity.too.large') {
+    const limit = (err as { limit?: unknown }).limit;
+    const details = [
+      tooLargeProblem(typeof limit === 'number' ? limit : undefined),
+    ];
     res
       .status(413)
       .json(
-        body(res, 'VALIDATION_FAILED', undefined, 'Request body is too large.'),
+        body(res, 'VALIDATION_FAILED', details, 'Request body is too large.'),
       );
     return;
   }
   if (type === 'entity.parse.failed' || err instanceof SyntaxError) {
     res
       .status(400)
-      .json(body(res, 'VALIDATION_FAILED', undefined, 'Malformed JSON body.'));
+      .json(
+        body(
+          res,
+          'VALIDATION_FAILED',
+          [{ ...badJsonProblem(), message: 'Malformed JSON body.' }],
+          'Malformed JSON body.',
+        ),
+      );
+    return;
+  }
+  // Other body-reading failures (a damaged gzip body, an unsupported
+  // encoding) are the client's fault, not a server error.
+  const httpErr = err as { status?: unknown; expose?: unknown } | null;
+  if (
+    httpErr?.expose === true &&
+    typeof httpErr.status === 'number' &&
+    httpErr.status >= 400 &&
+    httpErr.status < 500
+  ) {
+    res
+      .status(400)
+      .json(
+        body(
+          res,
+          'VALIDATION_FAILED',
+          [{ ...badJsonProblem(), message: 'Unreadable request body.' }],
+          'Unreadable request body.',
+        ),
+      );
     return;
   }
 

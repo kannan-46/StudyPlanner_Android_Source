@@ -1,12 +1,16 @@
 import { ObjectId, type Db } from 'mongodb';
-import { ZodError } from 'zod';
 import {
   BACKUP_FORMAT_V1,
+  BACKUP_MAX_TOPICS,
+  badJsonProblem,
+  checkBackup,
+  findLegacyOverflows,
   nameKey,
-  parseBackup,
   rebuildSchedule,
   ScheduleError,
+  topicLimitProblem,
   type BackupImportResult,
+  type BackupProblem,
   type BackupV1,
 } from '@planner/shared';
 import type { AppDeps } from '../../core/deps';
@@ -25,16 +29,15 @@ import type { TopicDoc } from '../topics/topic.mapper';
 import { createUsersRepository } from '../users/users.repository';
 import { mapLegacyBackup, type ImportPlan } from './legacy-mapper';
 
-const MAX_TOPICS = 5000;
-
-function invalid(details: unknown): AppError {
+function invalid(details: BackupProblem[]): AppError {
   return new AppError('BACKUP_INVALID', { details });
 }
 
 function v1ToPlan(data: BackupV1): ImportPlan {
   const examName = new Map(data.exams.map(e => [e.id, e.name]));
   const subjectName = new Map(data.subjects.map(s => [s.id, s.name]));
-  // The schema guarantees every reference resolves inside the file.
+  // The schema guarantees every subject resolves inside the file and drops
+  // links to exams that are not in it.
   const name = (m: Map<string, string>, id: string) => m.get(id) as string;
   return {
     settings: data.settings,
@@ -44,7 +47,7 @@ function v1ToPlan(data: BackupV1): ImportPlan {
       legacyId: t.legacyId ?? t.id,
       name: t.name,
       subjectName: name(subjectName, t.subjectId),
-      examNames: t.examIds.map(id => name(examName, id)),
+      examNames: t.examIds.flatMap(id => examName.get(id) ?? []),
       studiedOn: t.studiedOn,
       intervals: t.intervals,
       notes: t.notes,
@@ -53,12 +56,12 @@ function v1ToPlan(data: BackupV1): ImportPlan {
         .map(r => ({ doneOn: r.doneOn, dueOverride: r.dueOverride })),
     })),
     mockTests: data.mockTests.map(m => ({
-      sourceId: m.id,
+      sourceId: m.sourceId ?? m.id,
       title: m.title,
       takenOn: m.takenOn,
       score: m.score,
       maxScore: m.maxScore,
-      examName: m.examId === null ? null : name(examName, m.examId),
+      examName: m.examId === null ? null : (examName.get(m.examId) ?? null),
       notes: m.notes,
     })),
   };
@@ -108,6 +111,11 @@ export function createBackupService(deps: AppDeps) {
       createMockTestsRepository(db).list(userId),
     ]);
     const hex = (id: ObjectId) => id.toHexString();
+    // Older data can still point at a deleted exam. Leave such links out so
+    // every exported file imports again.
+    const examSet = new Set(exams.map(e => hex(e._id)));
+    const knownExam = (id: ObjectId | null | undefined): id is ObjectId =>
+      !!id && examSet.has(hex(id));
     return {
       format: BACKUP_FORMAT_V1,
       exportedAt: deps.now().toISOString(),
@@ -122,7 +130,7 @@ export function createBackupService(deps: AppDeps) {
         id: hex(t._id),
         name: t.name,
         subjectId: hex(t.subjectId),
-        examIds: t.examIds.map(hex),
+        examIds: t.examIds.filter(knownExam).map(hex),
         studiedOn: t.studiedOn,
         intervals: t.intervals,
         notes: t.notes,
@@ -139,8 +147,9 @@ export function createBackupService(deps: AppDeps) {
         takenOn: m.takenOn,
         score: m.score,
         maxScore: m.maxScore,
-        examId: m.examId ? hex(m.examId) : null,
+        examId: knownExam(m.examId) ? hex(m.examId) : null,
         notes: m.notes,
+        ...(typeof m.sourceId === 'string' ? { sourceId: m.sourceId } : {}),
       })),
     };
   }
@@ -160,7 +169,15 @@ export function createBackupService(deps: AppDeps) {
       });
     } catch (e) {
       if (e instanceof ScheduleError) {
-        throw invalid([{ path: ['topics', i], message: e.message }]);
+        const label = t.name ? `Topic "${t.name}"` : `Topic ${i + 1}`;
+        throw invalid([
+          {
+            reason: 'INVALID_RECORD',
+            path: ['topics', i],
+            message: e.message,
+            description: `${label}: its revision dates are not valid. Nothing was imported.`,
+          },
+        ]);
       }
       throw e;
     }
@@ -221,16 +238,23 @@ export function createBackupService(deps: AppDeps) {
         existingLegacy.add(d._id.toHexString());
         if (typeof d.legacyId === 'string') existingLegacy.add(d.legacyId);
       }
+      // Mock tests: native _ids (an account's own export) plus the stored
+      // source keys of earlier imports, so re-merging a file adds nothing.
       const mocks = await db
         .collection<MockTestDoc>('mockTests')
-        .find({ userId }, { projection: { _id: 1 } })
+        .find({ userId }, { projection: { _id: 1, sourceId: 1 } })
         .toArray();
-      mocks.forEach(m => existingMocks.add(m._id.toHexString()));
+      for (const m of mocks) {
+        existingMocks.add(m._id.toHexString());
+        if (typeof m.sourceId === 'string') existingMocks.add(m.sourceId);
+      }
     }
     const toImport = plan.topics.filter(t => !existingLegacy.has(t.legacyId));
     let skipped = plan.topics.length - toImport.length;
-    if (existingCount + toImport.length > MAX_TOPICS) {
-      throw new AppError('LIMIT_EXCEEDED');
+    if (existingCount + toImport.length > BACKUP_MAX_TOPICS) {
+      throw new AppError('LIMIT_EXCEEDED', {
+        details: [topicLimitProblem(existingCount, toImport.length)],
+      });
     }
     // Validate every schedule before writing.
     toImport.forEach(scheduleFor);
@@ -298,9 +322,15 @@ export function createBackupService(deps: AppDeps) {
       }
     }
 
-    const newMocks = plan.mockTests.filter(
-      m => m.sourceId === undefined || !existingMocks.has(m.sourceId),
-    );
+    // Skip mock tests already in the account and repeats within the file.
+    const seenMocks = new Set(existingMocks);
+    const newMocks = plan.mockTests.filter(m => {
+      if (m.sourceId === undefined) return true;
+      if (seenMocks.has(m.sourceId)) return false;
+      seenMocks.add(m.sourceId);
+      return true;
+    });
+    let skippedMocks = plan.mockTests.length - newMocks.length;
     const mockDocs: MockTestDoc[] = newMocks.map(m => ({
       _id: new ObjectId(),
       userId,
@@ -313,9 +343,21 @@ export function createBackupService(deps: AppDeps) {
         : null,
       notes: m.notes,
       createdAt: now,
+      ...(m.sourceId !== undefined ? { sourceId: m.sourceId } : {}),
     }));
+    let importedMocks = mockDocs.length;
     if (mockDocs.length > 0) {
-      await db.collection<MockTestDoc>('mockTests').insertMany(mockDocs);
+      try {
+        await db
+          .collection<MockTestDoc>('mockTests')
+          .insertMany(mockDocs, { ordered: false });
+      } catch (e) {
+        // A concurrent import of the same file won the sourceId race.
+        if (!isDuplicateKeyOnly(e)) throw e;
+        const inserted = (e as { insertedCount?: number }).insertedCount ?? 0;
+        skippedMocks += mockDocs.length - inserted;
+        importedMocks = inserted;
+      }
     }
 
     return {
@@ -323,9 +365,13 @@ export function createBackupService(deps: AppDeps) {
         exams: examRes.created,
         subjects: subjectRes.created,
         topics: importedTopics,
-        mockTests: mockDocs.length,
+        mockTests: importedMocks,
       },
-      skipped: { topics: skipped },
+      skipped: { topics: skipped, mockTests: skippedMocks },
+      shortened: {
+        topics: toImport.filter(t => t.shortened).length,
+        mockTests: newMocks.filter(m => m.shortened).length,
+      },
     };
   }
 
@@ -337,24 +383,38 @@ export function createBackupService(deps: AppDeps) {
       mode: 'merge' | 'replace',
       data: unknown,
     ): Promise<BackupImportResult> {
-      let parsed;
-      try {
-        parsed = parseBackup(data);
-      } catch (e) {
-        if (e instanceof ZodError) {
-          throw invalid(
-            e.issues.map(i => ({ path: i.path, message: i.message })),
-          );
+      // `data` is normally the backup object; the text of the file is also
+      // accepted, so unreadable JSON gets its own BAD_JSON reason.
+      let value = data;
+      if (typeof data === 'string') {
+        try {
+          value = JSON.parse(data) as unknown;
+        } catch {
+          throw invalid([badJsonProblem()]);
         }
-        throw e;
       }
+      const check = checkBackup(value);
+      if (!check.ok) throw invalid(check.problems);
+      const parsed = check.backup;
       const db = await deps.getDb();
       const user = await createUsersRepository(db).findById(userId);
       if (!user) throw new AppError('UNAUTHENTICATED');
-      const plan =
-        parsed.kind === 'v1'
-          ? v1ToPlan(parsed.data)
-          : mapLegacyBackup(parsed.data, user.settings.intervals);
+      let plan: ImportPlan;
+      if (parsed.kind === 'v1') {
+        plan = v1ToPlan(parsed.data);
+      } else {
+        plan = mapLegacyBackup(parsed.data, user.settings.intervals);
+        // Old apps allowed longer text; mark what the import shortened.
+        const over = findLegacyOverflows(value);
+        const topicIds = new Set(over.topics.map(t => t.id));
+        const mockIndexes = new Set(over.mockTests.map(m => m.index));
+        plan.topics.forEach(t => {
+          if (topicIds.has(t.legacyId)) t.shortened = true;
+        });
+        plan.mockTests.forEach((m, i) => {
+          if (mockIndexes.has(i)) m.shortened = true;
+        });
+      }
       return applyPlan(db, userId, plan, mode);
     },
   };

@@ -66,6 +66,9 @@ export function createExamsRepository(db: Db) {
       await db
         .collection<{ examIds: ObjectId[] }>('topics')
         .updateMany({ userId, examIds: id }, { $pull: { examIds: id } });
+      await db
+        .collection<{ examId: ObjectId | null }>('mockTests')
+        .updateMany({ userId, examId: id }, { $set: { examId: null } });
       return true;
     },
     countOwned(userId: ObjectId, ids: ObjectId[]): Promise<number> {
