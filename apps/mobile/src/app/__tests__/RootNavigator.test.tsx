@@ -6,7 +6,11 @@ import {
   NavigationContainer,
   getStateFromPath,
 } from '@react-navigation/native';
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
+import {
+  QueryClientProvider,
+  onlineManager,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { UserView } from '@planner/shared';
 import { createQueryClient } from '../../shared/api/queryClient';
@@ -60,6 +64,8 @@ const http = {
 
 const clients: QueryClient[] = [];
 afterEach(async () => {
+  // The offline tests switch React Query offline; switch it back.
+  onlineManager.setOnline(true);
   for (const c of clients.splice(0)) {
     await c.cancelQueries();
     c.clear();
@@ -68,7 +74,10 @@ afterEach(async () => {
 
 async function setup(child: React.ReactNode = <RootNavigator />) {
   const client = createQueryClient();
-  client.setDefaultOptions({ queries: { retry: false } });
+  // Like the app's client: requests run even when the phone reports offline.
+  client.setDefaultOptions({
+    queries: { retry: false, networkMode: 'always' },
+  });
   clients.push(client);
   return render(
     <SafeAreaProvider
@@ -151,6 +160,61 @@ it('shows the offline banner when offline, at 320 dp', async () => {
   });
   await setup();
   expect(screen.getByText(OFFLINE_TEXT)).toBeTruthy();
+});
+
+const newerRelease = {
+  latestVersionCode: 6,
+  latestVersionName: '4.2.0',
+  downloadUrl: 'https://github.com/x/y/releases/latest',
+  notes: null,
+};
+const answerVersion = (body: unknown) =>
+  (http.get as jest.Mock).mockImplementation((path: string) =>
+    path === '/v1/app/version' ? Promise.resolve(body) : new Promise(() => {}),
+  );
+
+it('shows the update banner in the main app, below the offline banner', async () => {
+  answerVersion(newerRelease);
+  mockedNetInfo.mockImplementation((cb: (s: unknown) => void) => {
+    cb({ isConnected: false, isInternetReachable: false });
+    return jest.fn();
+  });
+  await setup();
+  expect(await screen.findByText('Version 4.2.0 is available')).toBeTruthy();
+  const offline = screen.getByText(OFFLINE_TEXT);
+  const banner = screen.getByTestId('update-banner');
+  // Both share the top area, offline first; the tabs (Home) stay usable.
+  const top = banner.parent!;
+  const children = top.children.filter(c => typeof c !== 'string');
+  expect(screen.getAllByText('Home').length).toBeGreaterThan(0);
+  expect(offline).toBeTruthy();
+  expect(children.length).toBe(2);
+  expect(children[1]).toBe(banner);
+});
+
+it('shows the update banner when online too', async () => {
+  answerVersion(newerRelease);
+  await setup();
+  expect(await screen.findByTestId('update-banner')).toBeTruthy();
+  expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
+});
+
+it('does not show the update banner on sign-in', async () => {
+  answerVersion(newerRelease);
+  setState({ status: 'signedOut' });
+  await setup();
+  await screen.findByText('Continue with Google');
+  await act(() => new Promise<void>(r => setTimeout(r, 20)));
+  expect(screen.queryByTestId('update-banner')).toBeNull();
+});
+
+it('does not show the update banner during setup', async () => {
+  answerVersion(newerRelease);
+  setState({ status: 'signedIn', user: userWith(null) });
+  await setup();
+  await screen.findByText('Step 1 of 4');
+  await act(() => new Promise<void>(r => setTimeout(r, 20)));
+  expect(screen.queryByTestId('update-banner')).toBeNull();
 });
 
 it('renders MainTabs at 900 dp', async () => {

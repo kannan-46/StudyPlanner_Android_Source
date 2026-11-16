@@ -9,6 +9,7 @@ import { makeRevisionsApi } from '../../features/revisions/api';
 import { makeAgendaApi } from '../../features/agenda/api';
 import { makeStatsApi, makeMockTestsApi } from '../../features/progress/api';
 import { makeBackupApi } from '../../features/backup/api';
+import { makeAppVersionApi } from '../../features/appUpdate/api';
 
 export function makeApis(http: Http) {
   return {
@@ -23,6 +24,7 @@ export function makeApis(http: Http) {
     stats: makeStatsApi(http),
     mockTests: makeMockTestsApi(http),
     backup: makeBackupApi(http),
+    appVersion: makeAppVersionApi(http),
   };
 }
 export type Api = ReturnType<typeof makeApis>;

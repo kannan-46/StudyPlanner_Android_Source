@@ -16,6 +16,8 @@ import { TopicDetailScreen } from '../features/topics/TopicDetailScreen';
 import { ReminderHealthScreen } from '../features/settings/ReminderHealthScreen';
 import { ManageExamsSubjectsScreen } from '../features/settings/ManageExamsSubjectsScreen';
 import { MockTestFormScreen } from '../features/mocktests/MockTestFormScreen';
+import { UpdateBanner } from '../features/appUpdate/UpdateBanner';
+import { useUpdateCheck } from '../features/appUpdate/useUpdateCheck';
 import { Screen } from '../shared/ui/Screen';
 import { StackHeader, UnderHeaderContext } from '../shared/ui/StackHeader';
 import { useTheme } from '../shared/ui/ThemeProvider';
@@ -133,19 +135,28 @@ function RootScreens() {
 
 export function RootNavigator() {
   const online = useOnline();
+  const { state } = useAuth();
+  const update = useUpdateCheck();
   const { colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
+  // The update prompt belongs to the main app, not sign-in or setup.
+  const inMainApp =
+    state.status === 'signedIn' && state.user.onboardingCompletedAt !== null;
+  const showUpdate = inMainApp && update.showBanner;
   return (
     <View style={styles.flex}>
-      {online ? null : (
+      {online && !showUpdate ? null : (
         <View
           style={{
             backgroundColor: colors.background,
             paddingTop: insets.top,
             paddingHorizontal: spacing.sm,
+            paddingBottom: showUpdate ? spacing.xs : 0,
+            gap: spacing.xs,
           }}
         >
-          <Banner tone="warning" text={OFFLINE_TEXT} />
+          {online ? null : <Banner tone="warning" text={OFFLINE_TEXT} />}
+          {showUpdate ? <UpdateBanner check={update} /> : null}
         </View>
       )}
       <View style={styles.flex}>

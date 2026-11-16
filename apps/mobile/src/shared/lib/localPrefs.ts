@@ -173,3 +173,35 @@ export async function saveFocusTimer(
     // Best effort: the timer still works, it just won't survive a restart.
   }
 }
+
+const KEY_UPDATE_DISMISSED = 'prefs.updateDismissedVersionCode';
+
+/**
+ * The latest versionCode whose "update available" banner the user hid with
+ * Later. Never rejects: storage problems or a slow read mean none.
+ */
+export async function loadDismissedUpdate(): Promise<number | null> {
+  const read = AsyncStorage.getItem(KEY_UPDATE_DISMISSED).then(raw => {
+    const n = raw === null ? NaN : Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>(resolve => {
+    timer = setTimeout(() => resolve(null), LOAD_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([read, timeout]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function saveDismissedUpdate(versionCode: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEY_UPDATE_DISMISSED, String(versionCode));
+  } catch {
+    // Best effort: the banner may show again after a restart.
+  }
+}

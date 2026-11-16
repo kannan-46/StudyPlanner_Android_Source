@@ -12,7 +12,17 @@ export const queryKeys = {
   agenda: (today: string, days: number) => ['agenda', today, days] as const,
   stats: (today: string) => ['stats', today] as const,
   mockTests: ['mockTests'] as const,
+  appVersion: ['appUpdate', 'version'] as const,
+  updateDismissed: ['appUpdate', 'dismissed'] as const,
 };
+
+/**
+ * Queries refreshed when the app returns to the foreground. The update check
+ * keeps its own 6-hour staleTime instead of refetching on every return.
+ */
+export const refreshOnForeground = (query: {
+  queryKey: readonly unknown[];
+}): boolean => query.queryKey[0] !== 'appUpdate';
 
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   if (error instanceof ApiError) {

@@ -81,3 +81,11 @@ export interface MockTestView {
   examId: string | null;
   notes: string;
 }
+
+/** Latest Android release, from the public GET /v1/app/version. */
+export interface AppVersionView {
+  latestVersionCode: number;
+  latestVersionName: string;
+  downloadUrl: string;
+  notes: string | null;
+}

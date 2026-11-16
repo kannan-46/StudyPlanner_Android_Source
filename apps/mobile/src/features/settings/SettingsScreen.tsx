@@ -25,6 +25,11 @@ import { useRefetchOnFocus } from '../../shared/lib/useRefetchOnFocus';
 import { configureReminders } from '../../native/reminders';
 import { useAuth } from '../auth/AuthProvider';
 import { useDeleteAccount, useMe, useUpdateMe } from '../me/hooks';
+import {
+  DOWNLOAD_FAILED_TEXT,
+  updateAvailableText,
+} from '../appUpdate/UpdateBanner';
+import { useUpdateCheck } from '../appUpdate/useUpdateCheck';
 import { BackupSection } from './BackupSection';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -81,6 +86,53 @@ function LinkRow({ title, onPress }: { title: string; onPress: () => void }) {
     >
       <Text style={{ color: colors.accent, fontSize: 16 }}>{title}</Text>
     </Pressable>
+  );
+}
+
+/** Installed version, and the latest release when the server has a newer one. */
+function AppVersionRow() {
+  const { colors, spacing } = useTheme();
+  const snackbar = useSnackbar();
+  const check = useUpdateCheck();
+  const { installed, latest, updateAvailable } = check;
+  const current = installed.name || 'unknown';
+  async function onDownload() {
+    const ok = await check.download();
+    if (!ok) snackbar.show({ message: DOWNLOAD_FAILED_TEXT });
+  }
+  return (
+    <View testID="app-version-row" style={{ gap: spacing.xs }}>
+      <Text style={{ color: colors.text, fontSize: 16 }}>
+        {updateAvailable
+          ? `App version ${current} · Update available`
+          : `App version ${current}`}
+      </Text>
+      {updateAvailable && latest ? (
+        <>
+          <Text style={{ color: colors.text }}>
+            {updateAvailableText(latest.latestVersionName)}
+          </Text>
+          {latest.notes ? (
+            <Text style={{ color: colors.muted }}>{latest.notes}</Text>
+          ) : null}
+          <Button title="Download update" onPress={onDownload} />
+        </>
+      ) : (
+        <>
+          {latest ? (
+            <Text style={{ color: colors.muted }}>
+              You have the latest version
+            </Text>
+          ) : null}
+          <Button
+            title="Check for updates"
+            variant="secondary"
+            onPress={check.recheck}
+            loading={check.checking}
+          />
+        </>
+      )}
+    </View>
   );
 }
 
@@ -312,6 +364,10 @@ export function SettingsScreen() {
 
       <Section title="Backup">
         <BackupSection />
+      </Section>
+
+      <Section title="App">
+        <AppVersionRow />
       </Section>
 
       <Section title="Account">

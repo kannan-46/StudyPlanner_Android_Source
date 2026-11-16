@@ -4,7 +4,10 @@ import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiProvider } from '../shared/api/ApiProvider';
 import { createHttp } from '../shared/api/http';
-import { createQueryClient } from '../shared/api/queryClient';
+import {
+  createQueryClient,
+  refreshOnForeground,
+} from '../shared/api/queryClient';
 import { tokenStore } from '../shared/api/tokenStore';
 import { API_BASE_URL, setNativeThemeMode } from '../native/config';
 import {
@@ -35,7 +38,7 @@ function ThemedApp() {
   const queryClient = useQueryClient();
   useServerThemeSync();
   useAppForeground(() => {
-    queryClient.invalidateQueries();
+    queryClient.invalidateQueries({ predicate: refreshOnForeground });
   });
   return (
     <SnackbarProvider>

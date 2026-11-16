@@ -13,6 +13,7 @@ import { agendaRouter } from './modules/agenda/agenda.routes';
 import { statsRouter } from './modules/stats/stats.routes';
 import { mockTestsRouter } from './modules/mockTests/mockTests.routes';
 import { pagesRouter } from './modules/pages/pages.routes';
+import { appVersionRouter } from './modules/appVersion/appVersion.routes';
 import {
   BACKUP_BODY_LIMIT,
   backupRouter,
@@ -42,6 +43,7 @@ export function createApp(
   app.use('/v1/stats', statsRouter(deps));
   app.use('/v1/mock-tests', mockTestsRouter(deps));
   app.use('/v1/backup', backupRouter(deps));
+  app.use('/v1/app', appVersionRouter(deps));
   extraRoutes?.(app);
 
   app.use(notFoundHandler);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWindowDimensions } from 'react-native';
+import { Linking, useWindowDimensions } from 'react-native';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { DEFAULT_SETTINGS } from '@planner/shared';
 import { ApiError } from '../../../shared/api/errors';
@@ -284,5 +284,68 @@ it('renders at 320 dp / font scale 1.3 and at 1000 dp', async () => {
   expect(await screen.findByText('Sign out')).toBeTruthy();
   expect(screen.getByTestId('responsive-container').props.style).toMatchObject({
     maxWidth: 720,
+  });
+});
+
+describe('app version', () => {
+  const release = {
+    latestVersionCode: 6,
+    latestVersionName: '4.2.0',
+    downloadUrl: 'https://github.com/x/y/releases/latest',
+    notes: 'Faster sync',
+  };
+  function setupWithVersion(body: unknown) {
+    const http = setup();
+    const base = http.get.getMockImplementation()!;
+    http.get.mockImplementation(async (p: string) =>
+      p === '/v1/app/version' ? body : base(p),
+    );
+    return http;
+  }
+
+  it('shows the installed version and a check button when up to date', async () => {
+    const http = setupWithVersion({ ...release, latestVersionCode: 5 });
+    await renderWithProviders(<SettingsScreen />, http);
+    expect(await screen.findByText('You have the latest version')).toBeTruthy();
+    expect(screen.getByText('App version 4.1.0')).toBeTruthy();
+    const calls = () =>
+      http.get.mock.calls.filter(c => c[0] === '/v1/app/version').length;
+    expect(calls()).toBe(1);
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Check for updates' }),
+    );
+    await waitFor(() => expect(calls()).toBe(2));
+    expect(screen.queryByText(/Update available/)).toBeNull();
+  });
+
+  it('still shows the installed version when the check fails', async () => {
+    const http = setup();
+    const base = http.get.getMockImplementation()!;
+    http.get.mockImplementation(async (p: string) => {
+      if (p === '/v1/app/version') throw new ApiError('NOT_FOUND', 404);
+      return base(p);
+    });
+    await renderWithProviders(<SettingsScreen />, http);
+    expect(await screen.findByText('App version 4.1.0')).toBeTruthy();
+    // Once the failed check settles, the button is ready again; no error shown.
+    expect(
+      await screen.findByRole('button', { name: 'Check for updates' }),
+    ).toBeTruthy();
+    expect(screen.queryByText('You have the latest version')).toBeNull();
+  });
+
+  it('shows the update row and opens the download link', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    await renderWithProviders(<SettingsScreen />, setupWithVersion(release));
+    expect(
+      await screen.findByText('App version 4.1.0 · Update available'),
+    ).toBeTruthy();
+    expect(screen.getByText('Version 4.2.0 is available')).toBeTruthy();
+    expect(screen.getByText('Faster sync')).toBeTruthy();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Download update' }),
+    );
+    expect(open).toHaveBeenCalledWith(release.downloadUrl);
+    open.mockRestore();
   });
 });

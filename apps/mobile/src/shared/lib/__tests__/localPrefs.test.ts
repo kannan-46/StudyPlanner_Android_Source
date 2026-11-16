@@ -2,9 +2,11 @@ import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   clearOnboardingStep,
+  loadDismissedUpdate,
   loadFocusTimer,
   loadOnboardingStep,
   loadThemePrefs,
+  saveDismissedUpdate,
   saveFocusTimer,
   saveOnboardingStep,
   saveSyncedTheme,
@@ -144,5 +146,22 @@ describe('focus timer', () => {
       JSON.stringify({ status: 'idle', endsAt: null, remainingMs: 5 }),
     );
     expect(await loadFocusTimer()).toBeNull();
+  });
+});
+
+describe('dismissed update', () => {
+  it('remembers the version hidden with Later', async () => {
+    expect(await loadDismissedUpdate()).toBeNull();
+    await saveDismissedUpdate(6);
+    expect(await loadDismissedUpdate()).toBe(6);
+    await saveDismissedUpdate(7);
+    expect(await loadDismissedUpdate()).toBe(7);
+  });
+
+  it('ignores broken saved values', async () => {
+    await AsyncStorage.setItem('prefs.updateDismissedVersionCode', 'abc');
+    expect(await loadDismissedUpdate()).toBeNull();
+    await AsyncStorage.setItem('prefs.updateDismissedVersionCode', '-1');
+    expect(await loadDismissedUpdate()).toBeNull();
   });
 });

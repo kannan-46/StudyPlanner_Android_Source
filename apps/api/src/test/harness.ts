@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { AuthResponse } from '@planner/shared';
+import { DEFAULT_APP_VERSION } from '../config/env';
 import { createMongo } from '../core/db/mongo';
 import type { AppDeps, GoogleVerifier } from '../core/deps';
 
@@ -43,6 +44,7 @@ export function makeTestDeps(
     trustProxyHops: 0,
     devGoogleStub: false,
     buildSha: null,
+    appVersion: { ...DEFAULT_APP_VERSION },
   };
   const mongo = createMongo(config);
   openMongos.push(mongo);

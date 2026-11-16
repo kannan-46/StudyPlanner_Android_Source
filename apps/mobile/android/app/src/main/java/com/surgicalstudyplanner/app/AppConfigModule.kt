@@ -17,6 +17,9 @@ class AppConfigModule(context: ReactApplicationContext) : ReactContextBaseJavaMo
         "GOOGLE_WEB_CLIENT_ID" to BuildConfig.GOOGLE_WEB_CLIENT_ID,
         // The phone's 12/24-hour clock setting, so times show the same way.
         "IS_24_HOUR_CLOCK" to DateFormat.is24HourFormat(reactApplicationContext),
+        // The installed release, compared with the server's latest release.
+        "VERSION_CODE" to BuildConfig.VERSION_CODE,
+        "VERSION_NAME" to BuildConfig.VERSION_NAME,
     )
 
     /**
