@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { AppVersionView } from '@planner/shared';
 
-/** Used when the LATEST_VERSION_* / APK_DOWNLOAD_URL env vars are unset. */
+/**
+ * Used when the LATEST_VERSION_* / APK_DOWNLOAD_URL env vars are unset or
+ * invalid.
+ */
 export const DEFAULT_APP_VERSION: AppVersionView = {
   latestVersionCode: 5,
   latestVersionName: '4.1.0',
@@ -35,6 +38,15 @@ const schema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   DEV_GOOGLE_STUB: z.enum(['true', 'false']).default('false'),
   CONTACT_EMAIL: z.string().optional(),
+  VERCEL: z.string().optional(),
+  VERCEL_GIT_COMMIT_SHA: z.string().optional(),
+});
+
+/**
+ * The update-prompt settings are optional and must never take the API down,
+ * so each one is parsed on its own and an invalid value uses its default.
+ */
+const appVersionSchema = {
   LATEST_VERSION_CODE: z.coerce
     .number()
     .int()
@@ -51,9 +63,23 @@ const schema = z.object({
     .url({ protocol: /^https?$/ })
     .default(DEFAULT_APP_VERSION.downloadUrl),
   UPDATE_NOTES: z.string().trim().max(500).optional(),
-  VERCEL: z.string().optional(),
-  VERCEL_GIT_COMMIT_SHA: z.string().optional(),
-});
+};
+
+type AppVersionKey = keyof typeof appVersionSchema;
+
+/** Logs only the variable name, never its value. */
+function parseOptional<K extends AppVersionKey>(
+  env: Record<string, string | undefined>,
+  name: K,
+): z.output<(typeof appVersionSchema)[K]> {
+  const rule = appVersionSchema[name];
+  const result = rule.safeParse(env[name]);
+  if (result.success) {
+    return result.data as z.output<(typeof appVersionSchema)[K]>;
+  }
+  console.warn(`Ignoring invalid ${name}; using the default`);
+  return rule.parse(undefined) as z.output<(typeof appVersionSchema)[K]>;
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   // Empty strings count as unset so a blank .env line falls back to defaults.
@@ -87,10 +113,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     buildSha: e.VERCEL_GIT_COMMIT_SHA ?? null,
     contactEmail: e.CONTACT_EMAIL ?? null,
     appVersion: {
-      latestVersionCode: e.LATEST_VERSION_CODE,
-      latestVersionName: e.LATEST_VERSION_NAME,
-      downloadUrl: e.APK_DOWNLOAD_URL,
-      notes: e.UPDATE_NOTES || null,
+      latestVersionCode: parseOptional(cleaned, 'LATEST_VERSION_CODE'),
+      latestVersionName: parseOptional(cleaned, 'LATEST_VERSION_NAME'),
+      downloadUrl: parseOptional(cleaned, 'APK_DOWNLOAD_URL'),
+      notes: parseOptional(cleaned, 'UPDATE_NOTES') || null,
     },
   };
 }

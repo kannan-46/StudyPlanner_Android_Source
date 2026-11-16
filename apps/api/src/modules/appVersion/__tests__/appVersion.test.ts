@@ -44,6 +44,30 @@ describe('GET /v1/app/version', () => {
     });
   });
 
+  it('serves the default version code when LATEST_VERSION_CODE is invalid', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const config = loadConfig({
+        ...baseEnv,
+        LATEST_VERSION_CODE: '4.2.0',
+        LATEST_VERSION_NAME: '4.2.0',
+      });
+      const deps = makeTestDeps();
+      deps.config.appVersion = config.appVersion;
+      const res = await request(createApp(deps)).get('/v1/app/version');
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        latestVersionCode: 5,
+        latestVersionName: '4.2.0',
+      });
+      expect(warn).toHaveBeenCalledWith(
+        'Ignoring invalid LATEST_VERSION_CODE; using the default',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('ignores a bearer token and does not need the database', async () => {
     const res = await request(createApp(makeTestDeps()))
       .get('/v1/app/version')

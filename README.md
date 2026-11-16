@@ -50,16 +50,23 @@ named `StudyPlanner.apk` from the latest GitHub Release:
    draft or pre-release) so it becomes the "latest" one.
 4. In Vercel, set `LATEST_VERSION_CODE` and `LATEST_VERSION_NAME` (and
    optionally `UPDATE_NOTES`) to the new release, then redeploy (no code change
-   needed).
+   needed). `LATEST_VERSION_CODE` must be a whole number such as `6`: it is the
+   Android `versionCode`, not the display version, so never `4.2.0`.
+   `LATEST_VERSION_NAME` is the display name, such as `4.2.0`.
 
-| Variable              | Default                                    | Meaning                                 |
-| --------------------- | ------------------------------------------ | --------------------------------------- |
-| `LATEST_VERSION_CODE` | `5`                                        | Newest `versionCode` (integer)          |
-| `LATEST_VERSION_NAME` | `4.1.0`                                    | Shown to users, e.g. "Version 4.1.0"    |
-| `APK_DOWNLOAD_URL`    | `StudyPlanner.apk` from the latest release | http(s) link opened by **Download**     |
-| `UPDATE_NOTES`        | none                                       | Optional short text shown in the dialog |
+| Variable              | Default                                    | Meaning                                                 |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| `LATEST_VERSION_CODE` | `5`                                        | Newest `versionCode`: a whole number such as `6`        |
+| `LATEST_VERSION_NAME` | `4.1.0`                                    | Display name such as `4.2.0`, shown as "Version 4.2.0"  |
+| `APK_DOWNLOAD_URL`    | `StudyPlanner.apk` from the latest release | http(s) link opened by **Download**                     |
+| `UPDATE_NOTES`        | none                                       | Optional short text shown in the dialog (500 chars max) |
 
-All four are optional; a blank value uses the default.
+All four are optional; a blank value uses the default. An invalid value (for
+example `LATEST_VERSION_CODE=4.2.0`, a name over 40 characters or a URL that is
+not http(s)) does not take the API down: it is ignored, that setting uses its
+default, and the Vercel logs show a warning such as
+`Ignoring invalid LATEST_VERSION_CODE; using the default` (the value itself is
+never logged). Check the logs after changing these settings.
 
 ## Tests
 
