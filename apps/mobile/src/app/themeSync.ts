@@ -18,12 +18,18 @@ export type ThemeSyncDeps = {
  */
 export const QUIET_AFTER_SAVE_MS = 5000;
 
+export type ObserveOptions = { newAccount?: boolean };
+
 export type ThemeSync = {
   readonly mode: ThemeMode;
   /** The user picked a theme: apply now, save on the server in the background. */
   choose(mode: ThemeMode): void;
-  /** A server copy of the user arrived (sign-in, /v1/me, a save response). */
-  observeServer(theme: ThemeMode): void;
+  /**
+   * A server copy of the user arrived (sign-in, /v1/me, a save response).
+   * `newAccount`: the account has not finished setup, so it never chose a
+   * theme and its server value is only the default.
+   */
+  observeServer(theme: ThemeMode, opts?: ObserveOptions): void;
   setAuthStatus(status: 'loading' | 'signedIn' | 'signedOut'): void;
 };
 
@@ -43,6 +49,9 @@ export function createThemeSync(
   let inFlight = false;
   let quietUntil = 0;
   let recheckTimer: ReturnType<typeof setTimeout> | undefined;
+  // Changes on sign-out, so a save of the previous account that finishes
+  // later is ignored and never blocks the next account's saves.
+  let generation = 0;
 
   const scheduleRecheck = () => {
     if (recheckTimer || !deps.recheck) return;
@@ -68,15 +77,19 @@ export function createThemeSync(
   async function flush(): Promise<void> {
     if (inFlight || !signedIn || local === synced) return;
     inFlight = true;
+    const gen = generation;
     let ok = false;
     try {
-      setSynced(await deps.send(local));
-      quietUntil = Date.now() + QUIET_AFTER_SAVE_MS;
-      ok = true;
+      const saved = await deps.send(local);
+      if (gen === generation) {
+        setSynced(saved);
+        quietUntil = Date.now() + QUIET_AFTER_SAVE_MS;
+        ok = true;
+      }
     } catch {
       // Keep the local choice; it is sent again on the next server reply.
     } finally {
-      inFlight = false;
+      if (gen === generation) inFlight = false;
     }
     if (ok) await flush();
   }
@@ -89,9 +102,16 @@ export function createThemeSync(
       setLocal(mode);
       flush();
     },
-    observeServer(theme) {
+    observeServer(theme, opts) {
       // A reply that left before our save landed says nothing new.
       if (inFlight) return;
+      // An account that never chose a theme keeps the one picked on this
+      // phone, and the server is told about it.
+      if (synced === null && opts?.newAccount && theme !== local) {
+        setSynced(theme);
+        flush();
+        return;
+      }
       if (theme !== synced) {
         // Possibly an older reply that left before our save landed: check
         // again with a fresh copy once the quiet time is over.
@@ -108,7 +128,14 @@ export function createThemeSync(
     setAuthStatus(status) {
       signedIn = status === 'signedIn';
       // The next sign-in may be another account: forget what the server held.
-      if (status === 'signedOut') setSynced(null);
+      if (status === 'signedOut') {
+        generation += 1;
+        inFlight = false;
+        quietUntil = 0;
+        clearTimeout(recheckTimer);
+        recheckTimer = undefined;
+        setSynced(null);
+      }
     },
   };
 }

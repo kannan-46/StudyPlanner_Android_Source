@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Banner } from '../shared/ui/Banner';
@@ -8,7 +8,7 @@ import {
   type NativeStackNavigationOptions,
 } from '@react-navigation/native-stack';
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth, type AuthState } from '../features/auth/AuthProvider';
 import { SignInScreen } from '../features/auth/SignInScreen';
 import { OnboardingFlow } from '../features/onboarding/OnboardingNavigator';
 import { TopicFormScreen } from '../features/topics/TopicFormScreen';
@@ -24,6 +24,22 @@ import { useTheme } from '../shared/ui/ThemeProvider';
 import { MainTabs, type MainTabParamList } from './MainTabs';
 
 export const OFFLINE_TEXT = "No connection — changes can't be saved right now";
+/** Offline banner on the sign-in screen: there is nothing to save there. */
+export const OFFLINE_SIGN_IN_TEXT =
+  'No connection — connect to the internet to sign in';
+/** Offline banner while the app is starting. */
+export const OFFLINE_LOADING_TEXT =
+  'No connection — connect to the internet to continue';
+
+export function offlineText(status: AuthState['status']): string {
+  if (status === 'signedOut') return OFFLINE_SIGN_IN_TEXT;
+  if (status === 'loading') return OFFLINE_LOADING_TEXT;
+  return OFFLINE_TEXT;
+}
+
+/** How long the splash waits before saying that loading can take a while. */
+export const SPLASH_HINT_DELAY_MS = 3000;
+export const SPLASH_HINT_TEXT = 'Still loading — this can take a few seconds';
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
@@ -44,6 +60,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function Splash() {
   const { colors, spacing } = useTheme();
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), SPLASH_HINT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <Screen>
       <Text
@@ -60,6 +81,19 @@ function Splash() {
         Study Planner
       </Text>
       <ActivityIndicator color={colors.accent} accessibilityLabel="Loading" />
+      {slow ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={{
+            color: colors.muted,
+            fontSize: 14,
+            textAlign: 'center',
+            marginTop: spacing.lg,
+          }}
+        >
+          {SPLASH_HINT_TEXT}
+        </Text>
+      ) : null}
     </Screen>
   );
 }
@@ -146,13 +180,16 @@ export function RootNavigator() {
     <View style={styles.flex}>
       {online ? null : (
         <View
+          testID="offline-banner"
           style={{
             backgroundColor: colors.background,
+            // Lines up with the 16 dp page gutter used by every screen.
             paddingTop: insets.top,
-            paddingHorizontal: spacing.sm,
+            paddingHorizontal: spacing.lg,
+            paddingBottom: spacing.xs,
           }}
         >
-          <Banner tone="warning" text={OFFLINE_TEXT} />
+          <Banner tone="warning" text={offlineText(state.status)} />
         </View>
       )}
       <View style={styles.flex}>

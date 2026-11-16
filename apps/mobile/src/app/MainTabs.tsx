@@ -13,6 +13,7 @@ import { TopicsScreen } from '../features/topics/TopicsScreen';
 import { ProgressScreen } from '../features/progress/ProgressScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { useReminderSnapshotSync } from '../features/agenda/useReminderSnapshotSync';
+import { TAB_TITLES } from './tabTitles';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -120,7 +121,9 @@ export function MainTabs() {
     <Tab.Navigator
       tabBar={renderTabBar}
       screenOptions={({ route }) => ({
+        // Each tab draws its own title at the top of the screen (TAB_TITLES).
         headerShown: false,
+        title: TAB_TITLES[route.name],
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {

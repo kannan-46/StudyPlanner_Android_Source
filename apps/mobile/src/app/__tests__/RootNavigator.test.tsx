@@ -19,8 +19,17 @@ import type { Http } from '../../shared/api/http';
 import { ThemeProvider } from '../../shared/ui/ThemeProvider';
 import { SnackbarProvider, useSnackbar } from '../../shared/ui/Snackbar';
 import { useAuth } from '../../features/auth/AuthProvider';
-import { RootNavigator, OFFLINE_TEXT } from '../RootNavigator';
+import {
+  RootNavigator,
+  OFFLINE_LOADING_TEXT,
+  OFFLINE_SIGN_IN_TEXT,
+  OFFLINE_TEXT,
+  SPLASH_HINT_DELAY_MS,
+  SPLASH_HINT_TEXT,
+} from '../RootNavigator';
+import { spacing } from '../../shared/ui/theme';
 import { MainTabs } from '../MainTabs';
+import { TAB_TITLES } from '../tabTitles';
 import { linking } from '../linking';
 
 jest.mock('../../features/auth/AuthProvider', () => ({
@@ -142,14 +151,69 @@ it('shows the tabs for a completed user', async () => {
   expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
 });
 
-it('shows the offline banner on sign-in too', async () => {
-  setState({ status: 'signedOut' });
+const goOffline = () =>
   mockedNetInfo.mockImplementation((cb: (s: unknown) => void) => {
     cb({ isConnected: false, isInternetReachable: false });
     return jest.fn();
   });
+
+it('the offline banner on sign-in asks to connect to sign in', async () => {
+  setState({ status: 'signedOut' });
+  goOffline();
+  await setup();
+  expect(screen.getByText(OFFLINE_SIGN_IN_TEXT)).toBeTruthy();
+  expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
+});
+
+it('the offline banner while starting asks to connect to continue', async () => {
+  setState({ status: 'loading' });
+  goOffline();
+  await setup();
+  expect(screen.getByText(OFFLINE_LOADING_TEXT)).toBeTruthy();
+});
+
+it('the offline banner during setup still says changes cannot be saved', async () => {
+  setState({ status: 'signedIn', user: userWith(null) });
+  goOffline();
   await setup();
   expect(screen.getByText(OFFLINE_TEXT)).toBeTruthy();
+});
+
+it('the offline banner lines up with the 16 dp page gutter', async () => {
+  goOffline();
+  await setup();
+  const wrap = screen.getByTestId('offline-banner');
+  const style = Object.assign({}, ...[wrap.props.style].flat());
+  expect(style.paddingHorizontal).toBe(spacing.lg);
+});
+
+it('the splash explains a slow start after a few seconds', async () => {
+  jest.useFakeTimers();
+  try {
+    setState({ status: 'loading' });
+    await setup();
+    expect(screen.queryByText(SPLASH_HINT_TEXT)).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(SPLASH_HINT_DELAY_MS);
+    });
+    expect(screen.getByText(SPLASH_HINT_TEXT)).toBeTruthy();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it('tab labels come from the shared tab titles', async () => {
+  await setup();
+  expect(Object.keys(TAB_TITLES)).toEqual([
+    'Home',
+    'Schedule',
+    'Topics',
+    'Progress',
+    'Settings',
+  ]);
+  for (const title of Object.values(TAB_TITLES)) {
+    expect(screen.getAllByText(title).length).toBeGreaterThan(0);
+  }
 });
 
 it('shows the offline banner when offline, at 320 dp', async () => {

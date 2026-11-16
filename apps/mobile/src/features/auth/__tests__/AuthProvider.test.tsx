@@ -7,6 +7,8 @@ import {
   waitFor,
   act,
 } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { UserView } from '@planner/shared';
@@ -20,14 +22,17 @@ import {
   signOutGoogle,
   GoogleAuthError,
 } from '../../../native/googleAuth';
-import { clearReminders } from '../../../native/reminders';
+import { cancelOneShot, clearReminders } from '../../../native/reminders';
 import {
   AuthProvider,
   LOGOUT_TIMEOUT_MS,
+  STARTUP_OFFLINE_TEXT,
   useAuth,
   notifySessionEnded,
 } from '../AuthProvider';
-import { SignInScreen } from '../SignInScreen';
+import { SESSION_ENDED_TEXT, SignInScreen } from '../SignInScreen';
+import { useUpdateMe } from '../../me/hooks';
+import { useCompleteRevision } from '../../revisions/hooks';
 
 jest.mock('../../../shared/api/tokenStore', () => ({
   tokenStore: { get: jest.fn(), set: jest.fn(), clear: jest.fn() },
@@ -46,7 +51,10 @@ jest.mock('../../../native/googleAuth', () => {
     signOutGoogle: jest.fn(),
   };
 });
-jest.mock('../../../native/reminders', () => ({ clearReminders: jest.fn() }));
+jest.mock('../../../native/reminders', () => ({
+  clearReminders: jest.fn(),
+  cancelOneShot: jest.fn(),
+}));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
   default: jest.fn(),
@@ -68,7 +76,7 @@ function Probe() {
 }
 const probe = () => screen.getByTestId('probe').props.children;
 
-let http: { get: jest.Mock; post: jest.Mock };
+let http: { get: jest.Mock; post: jest.Mock; patch: jest.Mock };
 let qc: ReturnType<typeof createQueryClient>;
 
 function setup(child: React.ReactNode = <Probe />) {
@@ -97,12 +105,20 @@ beforeEach(() => {
     scale: 2,
     fontScale: 1,
   });
-  http = { get: jest.fn(), post: jest.fn() };
+  http = { get: jest.fn(), post: jest.fn(), patch: jest.fn() };
   ts.get.mockResolvedValue(null);
   ts.set.mockResolvedValue(undefined);
   ts.clear.mockResolvedValue(undefined);
   (clearReminders as jest.Mock).mockResolvedValue(undefined);
+  (cancelOneShot as jest.Mock).mockResolvedValue(undefined);
+  (NetInfo.addEventListener as jest.Mock).mockReturnValue(jest.fn());
   (signOutGoogle as jest.Mock).mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  jest.useRealTimers();
+  // Queries the provider filled (e.g. /v1/me) hold a garbage-collect timer.
+  qc?.clear();
 });
 
 it('stored tokens and me OK -> signedIn', async () => {
@@ -110,6 +126,15 @@ it('stored tokens and me OK -> signedIn', async () => {
   http.get.mockResolvedValue(user);
   await setup();
   await waitFor(() => expect(probe()).toBe('in:Asha'));
+});
+
+it('puts the signed-in user into the /v1/me cache (no second load)', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockResolvedValue(user);
+  await setup();
+  await waitFor(() => expect(probe()).toBe('in:Asha'));
+  expect(qc.getQueryData(['me'])).toEqual(user);
+  expect(http.get).toHaveBeenCalledTimes(1);
 });
 
 it('no tokens -> signedOut', async () => {
@@ -123,17 +148,103 @@ it('stored tokens and UNAUTHENTICATED -> cleared, signedOut', async () => {
   await setup();
   await waitFor(() => expect(probe()).toBe('signedOut'));
   expect(ts.clear).toHaveBeenCalled();
+  // Not a connection problem: no second try.
+  expect(http.get).toHaveBeenCalledTimes(1);
 });
 
-it('NETWORK at start without cache shows retry, then recovers', async () => {
+it('explains a session that ended on a cold start', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockRejectedValue(new ApiError('UNAUTHENTICATED', 401));
+  await setup(<SignInScreen />);
+  expect(await screen.findByText(SESSION_ENDED_TEXT)).toBeTruthy();
+});
+
+it('tries the first load again by itself after a network blip', async () => {
+  jest.useFakeTimers();
   ts.get.mockResolvedValue(tokens);
   http.get
     .mockRejectedValueOnce(new ApiError('NETWORK', 0))
     .mockResolvedValue(user);
   await setup();
-  expect(await screen.findByText("Can't reach the server")).toBeTruthy();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(1000);
+  });
+  expect(probe()).toBe('in:Asha');
+  expect(http.get).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText('Retry')).toBeNull();
+});
+
+it('a waking server (503) is tried again too', async () => {
+  jest.useFakeTimers();
+  ts.get.mockResolvedValue(tokens);
+  http.get
+    .mockRejectedValueOnce(new ApiError('SERVICE_UNAVAILABLE', 503))
+    .mockRejectedValueOnce(new ApiError('INTERNAL', 500))
+    .mockResolvedValue(user);
+  await setup();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(3000);
+  });
+  expect(probe()).toBe('in:Asha');
+  expect(http.get).toHaveBeenCalledTimes(3);
+});
+
+it('NETWORK at start without cache shows retry after 3 tries, then recovers', async () => {
+  jest.useFakeTimers();
+  ts.get.mockResolvedValue(tokens);
+  http.get
+    .mockRejectedValueOnce(new ApiError('NETWORK', 0))
+    .mockRejectedValueOnce(new ApiError('NETWORK', 0))
+    .mockRejectedValueOnce(new ApiError('NETWORK', 0))
+    .mockResolvedValue(user);
+  await setup();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(3000);
+  });
+  expect(http.get).toHaveBeenCalledTimes(3);
+  expect(screen.getByText("Can't reach the server — try again")).toBeTruthy();
   await fireEvent.press(screen.getByText('Retry'));
-  await waitFor(() => expect(probe()).toBe('in:Asha'));
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(0);
+  });
+  expect(probe()).toBe('in:Asha');
+});
+
+it('a request the server refuses (4xx) is not tried again', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockRejectedValue(new ApiError('RATE_LIMITED', 429));
+  await setup();
+  expect(
+    await screen.findByText('Too many tries — wait a minute and try again'),
+  ).toBeTruthy();
+  expect(http.get).toHaveBeenCalledTimes(1);
+});
+
+it('the start-up error says when the phone is offline and retries on reconnect', async () => {
+  jest.useFakeTimers();
+  let report: (s: unknown) => void = () => {};
+  (NetInfo.addEventListener as jest.Mock).mockImplementation(
+    (cb: (s: unknown) => void) => {
+      report = cb;
+      cb({ isConnected: false, isInternetReachable: false });
+      return jest.fn();
+    },
+  );
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockRejectedValue(new ApiError('NETWORK', 0));
+  await setup();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(3000);
+  });
+  expect(screen.getByText(STARTUP_OFFLINE_TEXT)).toBeTruthy();
+  http.get.mockResolvedValue(user);
+  await act(async () => {
+    report({ isConnected: true, isInternetReachable: true });
+  });
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(0);
+  });
+  expect(probe()).toBe('in:Asha');
 });
 
 function SignInHarness() {
@@ -162,6 +273,7 @@ it('signIn success stores tokens and sets user', async () => {
     deviceLabel: 'Android',
   });
   expect(ts.set).toHaveBeenCalledWith(tokens);
+  expect(qc.getQueryData(['me'])).toEqual(user);
 });
 
 it('signIn cancelled stays signedOut with no error text', async () => {
@@ -289,6 +401,206 @@ it('onSessionEnded triggers local sign-out', async () => {
   });
   await waitFor(() => expect(probe()).toBe('signedOut'));
   expect(clearReminders).toHaveBeenCalled();
+  expect(cancelOneShot).toHaveBeenCalledWith('focus_timer');
+});
+
+it('the sign-in screen explains an ended session, not a manual sign-out', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockResolvedValue(user);
+  http.post.mockResolvedValue(undefined);
+  function Out() {
+    const { signOut, state } = useAuth();
+    if (state.status === 'signedOut') return <SignInScreen />;
+    return (
+      <Text testID="out" onPress={() => signOut()}>
+        out
+      </Text>
+    );
+  }
+  await setup(<Out />);
+  await fireEvent.press(await screen.findByTestId('out'));
+  expect(await screen.findByText('Continue with Google')).toBeTruthy();
+  expect(screen.queryByText(SESSION_ENDED_TEXT)).toBeNull();
+});
+
+it('after an ended session the sign-in screen shows why', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockResolvedValue(user);
+  function Gate() {
+    const { state } = useAuth();
+    return state.status === 'signedOut' ? <SignInScreen /> : <Probe />;
+  }
+  await setup(<Gate />);
+  await waitFor(() => expect(probe()).toBe('in:Asha'));
+  await act(async () => {
+    notifySessionEnded();
+  });
+  expect(await screen.findByText(SESSION_ENDED_TEXT)).toBeTruthy();
+});
+
+it('signOut stops the focus timer and forgets per-user data on the phone', async () => {
+  await AsyncStorage.setItem(
+    'prefs.focusTimer',
+    JSON.stringify({ status: 'running', endsAt: 1, remainingMs: 1 }),
+  );
+  await AsyncStorage.setItem(
+    'prefs.onboardingStep',
+    JSON.stringify({ userId: 'u1', step: 3 }),
+  );
+  await signedInSetup();
+  await fireEvent.press(screen.getByTestId('out'));
+  await waitFor(() => expect(probe()).toBe('signedOut'));
+  expect(cancelOneShot).toHaveBeenCalledWith('focus_timer');
+  expect(await AsyncStorage.getItem('prefs.focusTimer')).toBeNull();
+  expect(await AsyncStorage.getItem('prefs.onboardingStep')).toBeNull();
+});
+
+it('a save that finishes after sign-out does not reach the next session', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockResolvedValue(user);
+  http.post.mockResolvedValue(undefined);
+  let finishSave: (u: UserView) => void = () => {};
+  http.patch.mockReturnValue(
+    new Promise<UserView>(r => {
+      finishSave = r;
+    }),
+  );
+  function Harness() {
+    const { signOut } = useAuth();
+    const update = useUpdateMe();
+    return (
+      <>
+        <Text
+          testID="save"
+          onPress={() => update.mutate({ settings: { reminderTime: '09:00' } })}
+        >
+          save
+        </Text>
+        <Text testID="out" onPress={() => signOut()}>
+          out
+        </Text>
+      </>
+    );
+  }
+  await setup(
+    <>
+      <Probe />
+      <Harness />
+    </>,
+  );
+  await waitFor(() => expect(probe()).toBe('in:Asha'));
+  await fireEvent.press(screen.getByTestId('save'));
+  await waitFor(() => expect(http.patch).toHaveBeenCalled());
+  await fireEvent.press(screen.getByTestId('out'));
+  await waitFor(() => expect(probe()).toBe('signedOut'));
+  await act(async () => {
+    finishSave(user);
+  });
+  expect(qc.getQueryData(['me'])).toBeUndefined();
+});
+
+it('a revision save rolled back after sign-out never shows in the next account', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockImplementation(async (path: string) => {
+    if (path === '/v1/me') return user;
+    throw new ApiError('NETWORK', 0);
+  });
+  let failDone: (e: unknown) => void = () => {};
+  const other = { id: 'u2', email: 'b@b.c', name: 'Bala' } as UserView;
+  http.post.mockImplementation((path: string) => {
+    if (path.endsWith('/complete')) {
+      return new Promise((_, reject) => {
+        failDone = reject;
+      });
+    }
+    if (path === '/v1/auth/google') {
+      return Promise.resolve({ ...tokens, user: other });
+    }
+    return Promise.resolve(undefined);
+  });
+  (signInWithGoogle as jest.Mock).mockResolvedValue('idtok');
+  const agendaKey = ['agenda', '2026-11-16', 30];
+  const item = {
+    topicId: 't1',
+    topicName: 'Old account topic',
+    subjectId: 's1',
+    subjectName: 'Anatomy',
+    revisionId: 'r1',
+    step: 1,
+    totalSteps: 6,
+    dueOn: '2026-11-16',
+    bucket: 'today',
+  };
+  function Harness() {
+    const { signOut, signIn } = useAuth();
+    const complete = useCompleteRevision('t1');
+    return (
+      <>
+        <Text
+          testID="done"
+          onPress={() =>
+            complete.mutate({
+              topicId: 't1',
+              revisionId: 'r1',
+              doneOn: '2026-11-16',
+            })
+          }
+        >
+          done
+        </Text>
+        <Text testID="out" onPress={() => signOut()}>
+          out
+        </Text>
+        <Text testID="go" onPress={() => signIn().catch(() => {})}>
+          go
+        </Text>
+      </>
+    );
+  }
+  await setup(
+    <>
+      <Probe />
+      <Harness />
+    </>,
+  );
+  await waitFor(() => expect(probe()).toBe('in:Asha'));
+  qc.setQueryData(agendaKey, [item]);
+  await fireEvent.press(screen.getByTestId('done'));
+  await waitFor(() =>
+    expect(http.post).toHaveBeenCalledWith(
+      '/v1/topics/t1/revisions/r1/complete',
+      { doneOn: '2026-11-16' },
+    ),
+  );
+  await fireEvent.press(screen.getByTestId('out'));
+  await waitFor(() => expect(probe()).toBe('signedOut'));
+  // The reply arrives after sign-out (http drops it as sessionEnded).
+  await act(async () => {
+    failDone(
+      new ApiError('UNAUTHENTICATED', 401, undefined, { sessionEnded: true }),
+    );
+  });
+  await fireEvent.press(screen.getByTestId('go'));
+  await waitFor(() => expect(probe()).toBe('in:Bala'));
+  expect(qc.getQueryData(agendaKey)).toBeUndefined();
+  expect(qc.getQueryData(['topic', 't1'])).toBeUndefined();
+  expect(qc.getQueryData(['me'])).toEqual(other);
+});
+
+it('a start-up load dropped by a sign-out is not reported as an ended session', async () => {
+  ts.get.mockResolvedValue(tokens);
+  http.get.mockRejectedValue(
+    new ApiError('UNAUTHENTICATED', 401, undefined, { sessionEnded: true }),
+  );
+  await setup(
+    <>
+      <Probe />
+      <SignInScreen />
+    </>,
+  );
+  await act(async () => {});
+  expect(ts.clear).not.toHaveBeenCalled();
+  expect(screen.queryByText(SESSION_ENDED_TEXT)).toBeNull();
 });
 
 describe('SignInScreen responsive', () => {

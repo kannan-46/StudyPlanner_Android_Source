@@ -30,6 +30,7 @@ import {
   useServerThemeSync,
 } from '../AppTheme';
 import { QUIET_AFTER_SAVE_MS } from '../themeSync';
+import { endSession } from '../../shared/api/session';
 
 jest.mock('../../shared/api/tokenStore', () => ({
   tokenStore: { get: jest.fn(), set: jest.fn(), clear: jest.fn() },
@@ -217,7 +218,12 @@ it('re-sends a choice the server never received instead of reverting it', async 
 it("the Can't reach the server screen uses the saved theme", async () => {
   http.get.mockRejectedValue(new ApiError('NETWORK', 0));
   await setup({ mode: 'dark', synced: 'dark' });
-  const msg = await screen.findByText("Can't reach the server");
+  // The first load is tried three times (about 3 s) before this shows.
+  const msg = await screen.findByText(
+    "Can't reach the server — try again",
+    {},
+    { timeout: 6000 },
+  );
   expect(msg).toHaveStyle({ color: darkColors.text });
   expect(barStyle()).toBe('light-content');
 });
@@ -274,4 +280,42 @@ it('a late reply from another settings save does not undo a theme just saved', a
   } finally {
     jest.useRealTimers();
   }
+});
+
+it('a new account keeps the theme chosen on this phone and saves it', async () => {
+  http.get.mockResolvedValue({
+    ...userWith('system'),
+    onboardingCompletedAt: null,
+  });
+  http.patch.mockResolvedValue({
+    ...userWith('dark'),
+    onboardingCompletedAt: null,
+  });
+  await setup({ mode: 'dark', synced: null });
+  await waitFor(() =>
+    expect(http.patch).toHaveBeenCalledWith('/v1/me', {
+      settings: { theme: 'dark' },
+    }),
+  );
+  expect(shown()).toBe('dark:dark');
+});
+
+it('a theme save that finishes after sign-out does not fill the cache', async () => {
+  http.get.mockResolvedValue(userWith('dark'));
+  let finish: (u: UserView) => void = () => {};
+  http.patch.mockReturnValue(
+    new Promise<UserView>(r => {
+      finish = r;
+    }),
+  );
+  await setup({ mode: 'dark', synced: 'dark' });
+  await waitFor(() => expect(qc?.getQueryData(['me'])).toBeDefined());
+  await fireEvent.press(screen.getByText('pick-light'));
+  await waitFor(() => expect(http.patch).toHaveBeenCalled());
+  endSession();
+  qc?.clear();
+  await act(async () => {
+    finish(userWith('light'));
+  });
+  expect(qc?.getQueryData(['me'])).toBeUndefined();
 });

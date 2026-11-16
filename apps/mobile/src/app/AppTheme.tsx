@@ -18,6 +18,7 @@ import { hashKey, useQueryClient } from '@tanstack/react-query';
 import type { UserView } from '@planner/shared';
 import { useApi } from '../shared/api/ApiProvider';
 import { queryKeys } from '../shared/api/queryClient';
+import { currentSession, isCurrentSession } from '../shared/api/session';
 import {
   saveSyncedTheme,
   saveThemeMode,
@@ -73,9 +74,12 @@ export function AppThemeProvider({
         saveSyncedTheme(m);
       },
       send: async m => {
+        const session = currentSession();
         // A /v1/me refetch already on its way may carry the old theme.
         await qc.cancelQueries({ queryKey: queryKeys.me });
         const user = await apiRef.current.me.update({ settings: { theme: m } });
+        // Signed out meanwhile: never put the old account into the cache.
+        if (!isCurrentSession(session)) throw new Error('Session ended');
         await qc.cancelQueries({ queryKey: queryKeys.me });
         qc.setQueryData(queryKeys.me, user);
         return user.settings.theme;
@@ -128,6 +132,8 @@ export function useServerThemeSync(): void {
   const signedIn = state.status === 'signedIn';
   const signedInRef = useRef(signedIn);
   const authTheme = signedIn ? state.user.settings.theme : null;
+  // Before setup is done the account cannot have chosen a theme.
+  const newAccount = signedIn && state.user.onboardingCompletedAt === null;
 
   useEffect(() => {
     signedInRef.current = state.status === 'signedIn';
@@ -135,8 +141,8 @@ export function useServerThemeSync(): void {
   }, [sync, state.status]);
 
   useEffect(() => {
-    if (authTheme) sync.observeServer(authTheme);
-  }, [sync, authTheme]);
+    if (authTheme) sync.observeServer(authTheme, { newAccount });
+  }, [sync, authTheme, newAccount]);
 
   useEffect(
     () =>
@@ -144,9 +150,13 @@ export function useServerThemeSync(): void {
       qc.getQueryCache().subscribe(event => {
         if (event.type !== 'updated' || event.action.type !== 'success') return;
         if (event.query.queryHash !== ME_HASH || !signedInRef.current) return;
-        const theme = (event.query.state.data as UserView | undefined)?.settings
-          ?.theme;
-        if (theme) sync.observeServer(theme);
+        const user = event.query.state.data as UserView | undefined;
+        const theme = user?.settings?.theme;
+        if (theme) {
+          sync.observeServer(theme, {
+            newAccount: user?.onboardingCompletedAt === null,
+          });
+        }
       }),
     [qc, sync],
   );

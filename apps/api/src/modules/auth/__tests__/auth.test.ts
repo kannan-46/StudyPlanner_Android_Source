@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { type Express } from 'express';
+import { ObjectId } from 'mongodb';
 import { DEFAULT_SETTINGS } from '@planner/shared';
 import { createApp } from '../../../app';
 import type { AppDeps } from '../../../core/deps';
@@ -84,7 +85,7 @@ describe('auth', () => {
     expect(res.body.error.code).toBe('GOOGLE_TOKEN_INVALID');
   });
 
-  it('rotates refresh tokens and 401s on immediate retry', async () => {
+  it('rotates refresh tokens; the rotated token works after use', async () => {
     const { app } = build();
     const auth = await signIn(app);
     const r1 = await request(app)
@@ -94,15 +95,54 @@ describe('auth', () => {
     expect(r1.body.accessToken).toEqual(expect.any(String));
     expect(r1.body.refreshToken).not.toBe(auth.refreshToken);
 
-    const reuse = await request(app)
-      .post('/v1/auth/refresh')
-      .send({ refreshToken: auth.refreshToken });
-    expect(reuse.status).toBe(401);
-
     const after = await request(app)
       .post('/v1/auth/refresh')
       .send({ refreshToken: r1.body.refreshToken });
     expect(after.status).toBe(200);
+
+    // The first token's replacement was used, so a late retry is refused.
+    const reuse = await request(app)
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: auth.refreshToken });
+    expect(reuse.status).toBe(401);
+  });
+
+  it('keeps the device signed in when a refresh response was lost', async () => {
+    let t = new Date('2026-11-13T10:00:00Z').getTime();
+    const { app, deps } = build({ now: () => new Date(t) });
+    const auth = await signIn(app);
+    const lost = await request(app)
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: auth.refreshToken });
+    expect(lost.status).toBe(200);
+    // The phone never saw `lost`, so it sends the old token again.
+    t += 5_000;
+    const retry = await request(app)
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: auth.refreshToken });
+    expect(retry.status).toBe(200);
+    expect(retry.body).toEqual({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String),
+    });
+    expect(retry.body.refreshToken).not.toBe(lost.body.refreshToken);
+    // The pair that never arrived is retired: one live session remains.
+    const db = await deps.getDb();
+    expect(
+      await db.collection('sessions').countDocuments({
+        userId: new ObjectId(auth.user.id),
+        revokedAt: null,
+      }),
+    ).toBe(1);
+    const next = await request(app)
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: retry.body.refreshToken });
+    expect(next.status).toBe(200);
+    const probe = await request(app)
+      .get('/probe')
+      .set('Authorization', `Bearer ${retry.body.accessToken}`);
+    expect(probe.status).toBe(200);
+    expect(probe.body.userId).toBe(auth.user.id);
   });
 
   it('logout revokes the session', async () => {
@@ -164,8 +204,9 @@ describe('auth', () => {
     expect(JSON.stringify(session)).not.toContain(auth.refreshToken);
   });
 
-  it('allows exactly one of two concurrent refreshes', async () => {
-    const { app } = build();
+  it('gives every pair from two concurrent refreshes a clear outcome', async () => {
+    const t = new Date('2026-11-13T10:00:00Z').getTime();
+    const { app, deps } = build({ now: () => new Date(t) });
     const auth = await signIn(app);
     const results = await Promise.all([
       request(app)
@@ -175,8 +216,21 @@ describe('auth', () => {
         .post('/v1/auth/refresh')
         .send({ refreshToken: auth.refreshToken }),
     ]);
-    expect(results.filter(r => r.status === 200)).toHaveLength(1);
+    // One wins; the other is refused at once and does not retire the winner.
+    const ok = results.filter(r => r.status === 200);
+    expect(ok).toHaveLength(1);
     expect(results.filter(r => r.status === 401)).toHaveLength(1);
+    const db = await deps.getDb();
+    const live = await db.collection('sessions').countDocuments({
+      userId: new ObjectId(auth.user.id),
+      revokedAt: null,
+    });
+    expect(live).toBe(1);
+    // The pair that was handed out keeps working.
+    const next = await request(app)
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: ok[0]?.body.refreshToken });
+    expect(next.status).toBe(200);
   });
 
   describe('refresh reuse', () => {
@@ -194,12 +248,58 @@ describe('auth', () => {
     const refresh = (app: Express, refreshToken: string) =>
       request(app).post('/v1/auth/refresh').send({ refreshToken });
 
-    it('keeps other sessions when a rotated token is retried within 60s', async () => {
-      const { app, a, b, rot } = await setup();
+    it('treats a retry within 60s as a lost response and keeps everyone signed in', async () => {
+      const { app, deps, a, b } = await setup();
       t += 59_000;
+      const retry = await refresh(app, a.refreshToken);
+      expect(retry.status).toBe(200);
+      // No revoke-all: both devices still have exactly one live session.
+      const db = await deps.getDb();
+      expect(
+        await db.collection('sessions').countDocuments({ revokedAt: null }),
+      ).toBe(2);
+      expect((await refresh(app, b.refreshToken)).status).toBe(200);
+      expect((await refresh(app, retry.body.refreshToken)).status).toBe(200);
+    });
+
+    it('keeps the device signed in after a second lost reply within 60s', async () => {
+      const { app, deps, a, b } = await setup();
+      t += 5_000;
+      const lost2 = await refresh(app, a.refreshToken);
+      expect(lost2.status).toBe(200);
+      t += 5_000;
+      const retry = await refresh(app, a.refreshToken);
+      expect(retry.status).toBe(200);
+      const db = await deps.getDb();
+      expect(
+        await db.collection('sessions').countDocuments({ revokedAt: null }),
+      ).toBe(2);
+      expect((await refresh(app, lost2.body.refreshToken)).status).toBe(401);
+      expect((await refresh(app, b.refreshToken)).status).toBe(200);
+      expect((await refresh(app, retry.body.refreshToken)).status).toBe(200);
+    });
+
+    it('refuses a retry that arrives while the new pair is still on its way', async () => {
+      const { app, deps, a, b, rot } = await setup();
+      t += 500;
+      expect((await refresh(app, a.refreshToken)).status).toBe(401);
+      const db = await deps.getDb();
+      expect(
+        await db.collection('sessions').countDocuments({ revokedAt: null }),
+      ).toBe(2);
+      // The pair just handed out still works, and so does the other device.
+      expect((await refresh(app, rot.body.refreshToken)).status).toBe(200);
+      expect((await refresh(app, b.refreshToken)).status).toBe(200);
+    });
+
+    it('refuses a retry within 60s once the new token was used, keeping other sessions', async () => {
+      const { app, a, b, rot } = await setup();
+      const used = await refresh(app, rot.body.refreshToken);
+      expect(used.status).toBe(200);
+      t += 30_000;
       expect((await refresh(app, a.refreshToken)).status).toBe(401);
       expect((await refresh(app, b.refreshToken)).status).toBe(200);
-      expect((await refresh(app, rot.body.refreshToken)).status).toBe(200);
+      expect((await refresh(app, used.body.refreshToken)).status).toBe(200);
     });
 
     it('revokes every session when reuse happens after 60s', async () => {

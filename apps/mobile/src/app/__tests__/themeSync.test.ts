@@ -181,3 +181,44 @@ describe('just after a save', () => {
     expect(deps.recheck).not.toHaveBeenCalled();
   });
 });
+
+describe('a new account (setup not finished)', () => {
+  it('keeps the theme chosen on this phone and saves it to the account', async () => {
+    const { sync, deps, sends } = setup({ mode: 'dark', synced: 'dark' });
+    sync.setAuthStatus('signedIn');
+    sync.setAuthStatus('signedOut');
+    sync.setAuthStatus('signedIn');
+    deps.apply.mockClear();
+    sync.observeServer('system', { newAccount: true });
+    expect(sync.mode).toBe('dark');
+    expect(deps.apply).not.toHaveBeenCalled();
+    expect(sends.map(s => s.mode)).toEqual(['dark']);
+    sends[0].resolve('dark');
+    await flush();
+    expect(deps.persistSynced).toHaveBeenLastCalledWith('dark');
+  });
+
+  it('an existing account still brings its own theme', () => {
+    const { sync } = setup({ mode: 'dark', synced: null });
+    sync.setAuthStatus('signedIn');
+    sync.observeServer('light', { newAccount: false });
+    expect(sync.mode).toBe('light');
+  });
+});
+
+it('a save from the previous account that finishes late is ignored', async () => {
+  const { sync, deps, sends } = setup({ mode: 'dark', synced: 'dark' });
+  sync.setAuthStatus('signedIn');
+  sync.choose('light');
+  expect(sends).toHaveLength(1);
+  sync.setAuthStatus('signedOut');
+  sync.setAuthStatus('signedIn');
+  // The next account's first copy is handled at once (not blocked by A's save).
+  sync.observeServer('system');
+  expect(sync.mode).toBe('system');
+  deps.persistSynced.mockClear();
+  sends[0].resolve('light');
+  await flush();
+  expect(deps.persistSynced).not.toHaveBeenCalled();
+  expect(sync.mode).toBe('system');
+});

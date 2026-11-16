@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
+import { onlineManager } from '@tanstack/react-query';
+import { Banner } from '../../shared/ui/Banner';
 import { Button } from '../../shared/ui/Button';
 import { Screen } from '../../shared/ui/Screen';
 import { useTheme } from '../../shared/ui/ThemeProvider';
 import { useResponsive } from '../../shared/ui/responsive';
-import { userMessage } from '../../shared/api/errors';
-import { ApiError } from '../../shared/api/errors';
+import { ApiError, userMessage } from '../../shared/api/errors';
 import { GoogleAuthError } from '../../native/googleAuth';
 import { useAuth } from './AuthProvider';
 
+/** Shown when the app signed the user out by itself. */
+export const SESSION_ENDED_TEXT =
+  "You've been signed out — sign in again to continue";
+
+/** Shown after a failed tap on 'Continue with Google' while offline. */
+export const SIGN_IN_OFFLINE_TEXT =
+  'No connection — connect to the internet to sign in';
+
 function errorText(e: unknown): string | null {
+  const cancelled = e instanceof GoogleAuthError && e.code === 'E_CANCELLED';
+  if (!cancelled && !onlineManager.isOnline()) return SIGN_IN_OFFLINE_TEXT;
   if (e instanceof GoogleAuthError) {
     switch (e.code) {
       case 'E_CANCELLED':
@@ -27,7 +38,9 @@ function errorText(e: unknown): string | null {
 }
 
 export function SignInScreen() {
-  const { signIn } = useAuth();
+  const { signIn, state } = useAuth();
+  const sessionEnded =
+    state.status === 'signedOut' && state.reason === 'sessionEnded';
   const { colors, spacing } = useTheme();
   const { isLandscape, height } = useResponsive();
   const [loading, setLoading] = useState(false);
@@ -66,6 +79,7 @@ export function SignInScreen() {
           Never miss a revision: spaced-repetition reminders for your exam
           topics.
         </Text>
+        {sessionEnded ? <Banner tone="info" text={SESSION_ENDED_TEXT} /> : null}
         <Button
           title="Continue with Google"
           onPress={onPress}
