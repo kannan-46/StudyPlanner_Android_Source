@@ -2,7 +2,6 @@ package com.surgicalstudyplanner.app.backup
 
 import android.app.Activity
 import android.content.Intent
-import android.widget.Toast
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
@@ -40,8 +39,12 @@ class BackupFilesModule(context: ReactApplicationContext) : ReactContextBaseJava
         super.invalidate()
     }
 
+    /**
+     * Opens the system save dialog suggesting [fileName] (blank: the default
+     * name) and writes [json]. The app shows its own "Backup saved" message.
+     */
     @ReactMethod
-    fun exportBackup(json: String, promise: Promise) {
+    fun exportBackup(json: String, fileName: String, promise: Promise) {
         if (exportPromise != null || importPromise != null) {
             promise.reject("E_IN_PROGRESS", "Another backup file operation is already open.")
             return
@@ -58,7 +61,7 @@ class BackupFilesModule(context: ReactApplicationContext) : ReactContextBaseJava
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "application/json"
-                putExtra(Intent.EXTRA_TITLE, "surgical-study-planner-backup.json")
+                putExtra(Intent.EXTRA_TITLE, BackupFileRules.fileName(fileName))
             }
             activity.startActivityForResult(intent, REQUEST_EXPORT)
         } catch (error: Exception) {
@@ -110,7 +113,6 @@ class BackupFilesModule(context: ReactApplicationContext) : ReactContextBaseJava
                 output.write(json.toByteArray(Charsets.UTF_8))
             } ?: throw IllegalStateException("Could not write the selected backup file.")
             currentExportJson = null
-            Toast.makeText(activity, "Backup saved", Toast.LENGTH_SHORT).show()
             promise.resolve(null)
         } catch (error: Exception) {
             currentExportJson = null
@@ -131,17 +133,19 @@ class BackupFilesModule(context: ReactApplicationContext) : ReactContextBaseJava
             val json = activity.contentResolver.openInputStream(uri)?.use { input ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(8_192)
-                var total = 0
+                var total = 0L
                 while (true) {
                     val count = input.read(buffer)
                     if (count < 0) break
                     total += count
-                    if (total > MAX_BACKUP_BYTES) throw IllegalArgumentException("Backup file is too large.")
+                    if (BackupFileRules.isTooLarge(total)) throw BackupTooLargeException()
                     output.write(buffer, 0, count)
                 }
                 output.toByteArray().toString(Charsets.UTF_8)
             } ?: throw IllegalStateException("Could not read the selected backup file.")
             promise.resolve(json)
+        } catch (_: BackupTooLargeException) {
+            promise.reject(BackupFileRules.E_TOO_LARGE, "Backup file is too large.")
         } catch (error: Exception) {
             promise.reject("E_FILE_READ", error.message ?: "Could not read the backup file.", error)
         }
@@ -149,9 +153,10 @@ class BackupFilesModule(context: ReactApplicationContext) : ReactContextBaseJava
 
     private var currentExportJson: String? = null
 
+    private class BackupTooLargeException : Exception("Backup file is too large.")
+
     private companion object {
         const val REQUEST_EXPORT = 4101
         const val REQUEST_IMPORT = 4102
-        const val MAX_BACKUP_BYTES = 1_000_000
     }
 }

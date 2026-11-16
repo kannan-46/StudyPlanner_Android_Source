@@ -1,6 +1,7 @@
 package com.surgicalstudyplanner.app.reminders
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -15,6 +16,17 @@ class OneShotPlanTest {
         assertTrue(code >= 10_000)
         assertNotEquals(ReminderScheduler.REQUEST_CODE, code)
         assertNotEquals(ReminderNotifications.NOTIFICATION_ID, code)
+        assertNotEquals(ReminderNotifications.TEST_NOTIFICATION_ID, code)
+        assertNotEquals(ReminderScheduler.BACKUP_REQUEST_CODE, code)
+    }
+
+    @Test fun testNotificationHasItsOwnId() {
+        assertNotEquals(ReminderNotifications.NOTIFICATION_ID, ReminderNotifications.TEST_NOTIFICATION_ID)
+    }
+
+    @Test fun idleActionIsDistinctFromTheMainAction() {
+        assertNotEquals(OneShotPlan.action("focus_timer"), OneShotPlan.idleAction("focus_timer"))
+        assertNotEquals(OneShotPlan.idleAction("a"), OneShotPlan.idleAction("b"))
     }
 
     @Test fun actionIsDistinctPerId() {
@@ -41,5 +53,28 @@ class OneShotPlanTest {
         assertThrows(IllegalArgumentException::class.java) { OneShotPlan.plan("a b", now, "t", "b", now) }
         assertThrows(IllegalArgumentException::class.java) { OneShotPlan.plan("x", 0, "t", "b", now) }
         assertThrows(IllegalArgumentException::class.java) { OneShotPlan.plan("x", now, "  ", "b", now) }
+    }
+
+    @Test fun currentAlarmAlerts() {
+        assertTrue(OneShotPlan.isCurrent(now, now))
+    }
+
+    @Test fun cancelledOrHandledAlarmStaysQuiet() {
+        assertFalse(OneShotPlan.isCurrent(null, now))
+    }
+
+    @Test fun replacedAlarmStaysQuiet() {
+        assertFalse(OneShotPlan.isCurrent(now + 60_000, now))
+    }
+
+    @Test fun alarmFromAnOlderVersionStillAlerts() {
+        assertTrue(OneShotPlan.isCurrent(null, null))
+    }
+
+    @Test fun appIsInFrontOnlyWhenOpenOnAnUnlockedScreen() {
+        assertTrue(OneShotPlan.appIsInFront(activityResumed = true, screenInteractive = true, keyguardLocked = false))
+        assertFalse(OneShotPlan.appIsInFront(activityResumed = false, screenInteractive = true, keyguardLocked = false))
+        assertFalse(OneShotPlan.appIsInFront(activityResumed = true, screenInteractive = false, keyguardLocked = false))
+        assertFalse(OneShotPlan.appIsInFront(activityResumed = true, screenInteractive = true, keyguardLocked = true))
     }
 }

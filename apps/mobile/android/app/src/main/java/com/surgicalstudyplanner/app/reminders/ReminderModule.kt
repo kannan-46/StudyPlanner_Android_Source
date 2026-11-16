@@ -14,6 +14,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.PermissionAwareActivity
 import com.facebook.react.modules.core.PermissionListener
+import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
@@ -24,8 +25,12 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
     @ReactMethod
     fun syncSnapshot(itemsJson: String, promise: Promise) = run(promise) {
         val items = ReminderStore.parseItems(itemsJson)
-        ReminderStore.update(ctx) { it.copy(items = items) }
+        val state = ReminderStore.update(ctx) { it.copy(items = items) }
         ReminderScheduler.arm(ctx)
+        // Keep a summary that is still showing honest: gone once nothing is
+        // due, quietly updated when the counts change.
+        val fresh = if (state.enabled) ReminderContent.compose(items, LocalDate.now()) else null
+        ReminderNotifications.refreshPosted(ctx, fresh)
         null
     }
 
@@ -34,6 +39,7 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
         require(hour in 0..23 && minute in 0..59) { "Reminder time is invalid." }
         ReminderStore.update(ctx) { it.copy(enabled = enabled, hour = hour, minute = minute) }
         ReminderScheduler.arm(ctx)
+        if (!enabled) ReminderNotifications.dismiss(ctx)
         null
     }
 
@@ -46,6 +52,16 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
             putBoolean("ignoringBatteryOptimizations", power?.isIgnoringBatteryOptimizations(ctx.packageName) == true)
             val next = ReminderScheduler.nextFireAtMillis(ctx)
             if (next == null) putNull("nextFireAtMillis") else putDouble("nextFireAtMillis", next.toDouble())
+            // Added after 4.2.0 (new fields only): whether a reminder will really show, and when.
+            val state = ReminderStore.read(ctx)
+            val notificationsOn = ReminderNotifications.areEnabled(ctx)
+            putBoolean("dailyReminderEnabled", state.enabled)
+            putBoolean("exactTiming", ReminderScheduler.isTimingExact(ctx))
+            val show = ReminderScheduler.nextShowAtMillis(ctx)
+            if (show == null) putNull("nextShowAtMillis") else putDouble("nextShowAtMillis", show.toDouble())
+            val blocked = ReminderScheduler.blockedReason(state.enabled, notificationsOn, show != null)
+            if (blocked == null) putNull("blockedReason") else putString("blockedReason", blocked)
+            putBoolean("focusAlertsEnabled", ReminderNotifications.focusAlertsEnabled(ctx))
         }
     }
 
@@ -111,7 +127,12 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
             return
         }
         run(promise) {
-            ReminderNotifications.show(ctx, ReminderContent.Content("Test reminder", "Daily revision reminders are working."))
+            // Its own id, so it never replaces (or gets removed with) the real summary.
+            ReminderNotifications.show(
+                ctx,
+                ReminderContent.testContent(ReminderStore.read(ctx).enabled),
+                ReminderNotifications.TEST_NOTIFICATION_ID,
+            )
             null
         }
     }
@@ -120,19 +141,36 @@ class ReminderModule(context: ReactApplicationContext) : ReactContextBaseJavaMod
     fun clearAll(promise: Promise) = run(promise) {
         ReminderStore.clear(ctx)
         ReminderScheduler.cancel(ctx)
-        ReminderNotifications.dismiss(ctx)
+        // Sign-out also stops a running focus timer alarm and clears every
+        // notification the app posted (summary, test, focus alert).
+        OneShotScheduler.cancelAll(ctx)
+        ReminderNotifications.dismissAll(ctx)
         null
     }
 
     @ReactMethod
     fun scheduleOneShot(id: String, atMillis: Double, title: String, body: String, promise: Promise) = run(promise) {
-        OneShotScheduler.schedule(ctx, OneShotPlan.plan(id, atMillis.toLong(), title, body, System.currentTimeMillis()))
-        null
+        val exact = OneShotScheduler.schedule(
+            ctx,
+            OneShotPlan.plan(id, atMillis.toLong(), title, body, System.currentTimeMillis()),
+        )
+        // Added after 4.2.0 (new fields only): whether the alert will come on time, and whether it can show at all.
+        Arguments.createMap().apply {
+            putBoolean("exact", exact)
+            putBoolean("canNotify", ReminderNotifications.focusAlertsEnabled(ctx))
+        }
     }
 
     @ReactMethod
     fun cancelOneShot(id: String, promise: Promise) = run(promise) {
         OneShotScheduler.cancel(ctx, OneShotPlan.validateId(id))
+        null
+    }
+
+    /** Cancels a one-shot alarm but keeps its notification if it already showed. */
+    @ReactMethod
+    fun cancelOneShotAlarm(id: String, promise: Promise) = run(promise) {
+        OneShotScheduler.cancelAlarmOnly(ctx, OneShotPlan.validateId(id))
         null
     }
 

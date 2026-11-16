@@ -10,7 +10,6 @@ class SystemEventsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in HANDLED) return
         ReminderNotifications.createChannel(context)
-        ReminderScheduler.arm(context)
         val now = ZonedDateTime.now()
         val state = ReminderStore.read(context)
         val missedEligible = intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
@@ -22,6 +21,8 @@ class SystemEventsReceiver : BroadcastReceiver() {
             }
             ReminderStore.update(context) { it.copy(lastShownDate = now.toLocalDate()) }
         }
+        // Armed after any catch-up, so a reminder already shown today is not set again for today.
+        ReminderScheduler.arm(context)
     }
 
     companion object {

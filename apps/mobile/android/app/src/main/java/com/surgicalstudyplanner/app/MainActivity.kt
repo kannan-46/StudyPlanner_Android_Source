@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.surgicalstudyplanner.app.reminders.AppVisibility
 import com.surgicalstudyplanner.app.reminders.ReminderNotifications
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -31,6 +32,17 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     ReminderNotifications.createChannel(this)
+  }
+
+  // Lets the focus-timer alarm know when the app is open and gives the alert itself.
+  override fun onResume() {
+    super.onResume()
+    AppVisibility.activityResumed = true
+  }
+
+  override fun onPause() {
+    AppVisibility.activityResumed = false
+    super.onPause()
   }
 
   /**

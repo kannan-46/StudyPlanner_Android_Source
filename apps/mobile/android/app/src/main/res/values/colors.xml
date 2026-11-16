@@ -1,4 +1,6 @@
 <resources>
     <!-- Matches the app's light palette (background). -->
     <color name="app_background">#F3F7FA</color>
+    <!-- Notification accent; matches the app's light palette (accent). -->
+    <color name="notification_accent">#156E81</color>
 </resources>

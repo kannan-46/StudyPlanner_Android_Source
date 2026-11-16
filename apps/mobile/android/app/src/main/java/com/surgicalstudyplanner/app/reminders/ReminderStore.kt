@@ -17,6 +17,10 @@ object ReminderStore {
         val minute: Int = 0,
         val lastShownDate: LocalDate? = null,
         val items: List<ReminderContent.Item> = emptyList(),
+        /** When the daily alarm is set to go off (epoch millis), or null when not armed. */
+        val armedAtMillis: Long? = null,
+        /** Whether that alarm is exact (true) or may arrive a little late (false). */
+        val armedExact: Boolean? = null,
     )
 
     private fun prefs(context: Context) =
@@ -59,6 +63,8 @@ object ReminderStore {
                 lastShownDate = if (o.isNull("lastShownDate")) null
                 else runCatching { LocalDate.parse(o.getString("lastShownDate")) }.getOrNull(),
                 items = parseItems(o.optJSONArray("items") ?: JSONArray()),
+                armedAtMillis = if (o.has("armedAtMillis") && !o.isNull("armedAtMillis")) o.optLong("armedAtMillis") else null,
+                armedExact = if (o.has("armedExact") && !o.isNull("armedExact")) o.optBoolean("armedExact") else null,
             )
         } catch (_: Exception) {
             State()
@@ -74,6 +80,8 @@ object ReminderStore {
             .put("minute", s.minute)
             .put("lastShownDate", s.lastShownDate?.toString() ?: JSONObject.NULL)
             .put("items", items)
+            .put("armedAtMillis", s.armedAtMillis ?: JSONObject.NULL)
+            .put("armedExact", s.armedExact ?: JSONObject.NULL)
             .toString()
     }
 }
