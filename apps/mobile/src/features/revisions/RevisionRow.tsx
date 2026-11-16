@@ -35,6 +35,7 @@ import {
   useCompleteRevision,
   useSnoozeRevision,
   useUndoRevision,
+  useUnsnoozeRevision,
 } from './hooks';
 
 export type RevisionRowProps = {
@@ -143,6 +144,7 @@ export function RevisionRow({
   const complete = useCompleteRevision(topicId);
   const undo = useUndoRevision(topicId);
   const snooze = useSnoozeRevision(topicId);
+  const unsnooze = useUnsnoozeRevision(topicId);
   const [confirmingUndo, setConfirmingUndo] = useState(false);
 
   const today = todayProp ?? localToday();
@@ -293,26 +295,66 @@ export function RevisionRow({
     }
   };
 
+  /**
+   * Puts a snoozed revision back on `dueOn`, the date it showed before.
+   * `afterSnooze`: the snooze being taken back, if it may not be saved yet.
+   */
+  const runUnsnooze = async (
+    dueOn: LocalDate,
+    restore: AgendaItem | undefined,
+    afterSnooze?: Promise<unknown>,
+  ) => {
+    const name = nameForMessages();
+    try {
+      await unsnooze.mutateAsync({ ...vars, dueOn, restore, afterSnooze });
+      snackbar.show({ message: revisionMessage(name, step, 'snooze undone') });
+    } catch (e) {
+      fail(e, () => {
+        runUnsnooze(dueOn, restore);
+      });
+    }
+  };
+
   // Optimistic too: the row moves to its new date at once, so it can't be
-  // snoozed twice by mistake. A failure puts it back and offers Retry.
+  // snoozed twice by mistake. A failure puts it back and offers Retry. The
+  // snackbar offers Undo, which puts the row back on the date it showed; an
+  // Undo tapped before the snooze is saved waits for it (same topic scope)
+  // and sends nothing if the snooze fails.
   const onSnooze = async () => {
     const now = localToday();
     const name = nameForMessages();
+    const prevDue = due;
+    const prevRow = agendaItem;
     const expected = addDays(maxDate(now, due), 1);
+    let undone = false;
     const saving = snooze.mutateAsync({ ...vars, today: now, days: 1 });
+    const action = {
+      actionLabel: 'Undo',
+      onAction: () => {
+        undone = true;
+        runUnsnooze(prevDue, prevRow, saving);
+      },
+    };
     const pendingMessage = snoozeMessage(name, step, expected, now);
     const id = snackbar.show({
       message: pendingMessage,
+      ...action,
       durationMs: PENDING_SNACKBAR_MS,
     });
     try {
       const res = await saving;
+      if (undone) return;
       const saved = isTopic(res)
         ? res.revisions.find(r => r.id === revision.id)
         : undefined;
       const to = saved?.dueOverride ?? saved?.dueOn ?? expected;
-      snackbar.update(id, { message: snoozeMessage(name, step, to, now) });
+      snackbar.update(id, {
+        message: snoozeMessage(name, step, to, now),
+        ...action,
+      });
     } catch (e) {
+      // Already taken back: the Undo reports the outcome.
+      if (undone) return;
       if (isSessionEndedError(e)) dropPending(id, pendingMessage);
       else fail(e, onSnooze);
     }
@@ -419,7 +461,9 @@ export function RevisionRow({
                 onDone();
               }}
               loading={complete.isPending}
-              disabled={snooze.isPending || undo.isPending}
+              disabled={
+                snooze.isPending || undo.isPending || unsnooze.isPending
+              }
             />
             <Button
               title="Snooze 1 day"
@@ -428,7 +472,7 @@ export function RevisionRow({
               onPress={() => {
                 onSnooze();
               }}
-              loading={snooze.isPending}
+              loading={snooze.isPending || unsnooze.isPending}
               disabled={complete.isPending || undo.isPending}
             />
           </>
@@ -440,7 +484,9 @@ export function RevisionRow({
             variant="secondary"
             onPress={onRowUndo}
             loading={undo.isPending}
-            disabled={complete.isPending || snooze.isPending}
+            disabled={
+              complete.isPending || snooze.isPending || unsnooze.isPending
+            }
           />
         ) : null}
       </View>

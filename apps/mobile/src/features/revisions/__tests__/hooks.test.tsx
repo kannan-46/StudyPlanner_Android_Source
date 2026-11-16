@@ -10,6 +10,7 @@ import {
   useCompleteRevision,
   useSnoozeRevision,
   useUndoRevision,
+  useUnsnoozeRevision,
 } from '../hooks';
 import { endSession } from '../../../shared/api/session';
 import { placeInAgenda } from '../../agenda/cache';
@@ -491,6 +492,222 @@ describe('useSnoozeRevision', () => {
     });
     expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([todayItem]);
     await waitFor(() => expect(result.current.agenda.data).toEqual([moved]));
+  });
+});
+
+describe('useUnsnoozeRevision', () => {
+  const todayItem: AgendaItem = { ...agendaItem, dueOn: '2026-11-13' };
+  const moved: AgendaItem = {
+    ...todayItem,
+    dueOn: '2026-11-14',
+    bucket: 'upcoming',
+  };
+  const snoozedTopic: TopicView = {
+    ...topic,
+    revisions: [
+      {
+        ...topic.revisions[0]!,
+        dueOn: '2026-11-14',
+        dueOverride: '2026-11-14',
+      },
+      { ...topic.revisions[1]!, dueOn: '2026-11-21' },
+    ],
+    nextDueOn: '2026-11-14',
+  };
+  const snoozeVars = {
+    topicId: 't1',
+    revisionId: 'R1',
+    today: '2026-11-13',
+    days: 1,
+  };
+  const vars = { topicId: 't1', revisionId: 'R1', dueOn: '2026-11-05' };
+
+  it('puts the row and the topic back at once, then keeps the saved topic', async () => {
+    const gate = deferred<unknown>();
+    const post = jest.fn(() => gate.promise);
+    const { qc, today, wrapper } = setup(post);
+    qc.setQueryData(queryKeys.topic('t1'), snoozedTopic);
+    qc.setQueryData(queryKeys.agenda(today, 30), [moved]);
+    qc.setQueryData(queryKeys.agenda(today, 60), [moved]);
+    const { result, unmount } = await renderHook(
+      () => useUnsnoozeRevision('t1'),
+      { wrapper },
+    );
+    cleanups.push(unmount, () => gate.resolve({}));
+    let saving: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      saving = result.current.mutateAsync({ ...vars, restore: agendaItem });
+    });
+    const overdue = { ...agendaItem, bucket: 'overdue' };
+    await waitFor(() =>
+      expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([overdue]),
+    );
+    expect(qc.getQueryData(queryKeys.agenda(today, 60))).toEqual([overdue]);
+    expect(
+      qc.getQueryData<TopicView>(queryKeys.topic('t1'))?.revisions[0],
+    ).toEqual(topic.revisions[0]);
+    expect(post).toHaveBeenCalledWith('/v1/topics/t1/revisions/R1/unsnooze', {
+      dueOn: '2026-11-05',
+    });
+    await act(async () => {
+      gate.resolve(topic);
+      await saving;
+    });
+    expect(qc.getQueryData(queryKeys.topic('t1'))).toEqual(topic);
+    expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([overdue]);
+  });
+
+  it('without a saved row moves the cached row back to the date', async () => {
+    const post = jest.fn().mockResolvedValue({});
+    const { qc, today, wrapper } = setup(post);
+    qc.setQueryData(queryKeys.topic('t1'), snoozedTopic);
+    qc.setQueryData(queryKeys.agenda(today, 30), [moved]);
+    const { result, unmount } = await renderHook(
+      () => useUnsnoozeRevision('t1'),
+      { wrapper },
+    );
+    cleanups.push(unmount);
+    await act(async () => {
+      await result.current.mutateAsync({ ...vars, dueOn: today });
+    });
+    expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([todayItem]);
+  });
+
+  it('puts the snoozed state back when it fails', async () => {
+    const post = jest.fn().mockRejectedValue(new ApiError('NETWORK', 0));
+    const { qc, today, wrapper } = setup(post);
+    qc.setQueryData(queryKeys.topic('t1'), snoozedTopic);
+    qc.setQueryData(queryKeys.agenda(today, 30), [moved]);
+    const { result, unmount } = await renderHook(
+      () => useUnsnoozeRevision('t1'),
+      { wrapper },
+    );
+    cleanups.push(unmount);
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ ...vars, restore: agendaItem }),
+      ).rejects.toThrow();
+    });
+    expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([moved]);
+    expect(qc.getQueryData(queryKeys.topic('t1'))).toEqual(snoozedTopic);
+  });
+
+  it('queued behind its snooze, it restores the row at once, for good', async () => {
+    const gate = deferred<unknown>();
+    const post = jest
+      .fn()
+      .mockImplementationOnce(() => gate.promise)
+      .mockResolvedValue({});
+    const { qc, today, wrapper } = setup(post);
+    qc.setQueryData(queryKeys.agenda(today, 30), [todayItem]);
+    const { result, unmount } = await renderHook(
+      () => ({
+        snooze: useSnoozeRevision('t1'),
+        unsnooze: useUnsnoozeRevision('t1'),
+      }),
+      { wrapper },
+    );
+    cleanups.push(unmount, () => gate.resolve({}));
+    const agenda = () => qc.getQueryData(queryKeys.agenda(today, 30));
+    let snoozing: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      snoozing = result.current.snooze.mutateAsync(snoozeVars);
+    });
+    await waitFor(() => expect(agenda()).toEqual([moved]));
+    await act(async () => {
+      result.current.unsnooze.mutate({
+        ...vars,
+        dueOn: today,
+        restore: todayItem,
+        afterSnooze: snoozing,
+      });
+    });
+    await waitFor(() => expect(agenda()).toEqual([todayItem]));
+    expect(post).toHaveBeenCalledTimes(1);
+    // The snooze's answer must not move the restored row again.
+    await act(async () => gate.resolve(snoozedTopic));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls[1]).toEqual([
+      '/v1/topics/t1/revisions/R1/unsnooze',
+      { dueOn: today },
+    ]);
+    expect(agenda()).toEqual([todayItem]);
+  });
+
+  it('sends nothing when the snooze it waits for fails', async () => {
+    const gate = deferred<unknown>();
+    const post = jest.fn().mockImplementationOnce(() => gate.promise);
+    const { qc, today, wrapper } = setup(post);
+    qc.setQueryData(queryKeys.agenda(today, 30), [todayItem]);
+    const { result, unmount } = await renderHook(
+      () => ({
+        snooze: useSnoozeRevision('t1'),
+        unsnooze: useUnsnoozeRevision('t1'),
+      }),
+      { wrapper },
+    );
+    cleanups.push(unmount);
+    let snoozing: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      snoozing = result.current.snooze.mutateAsync(snoozeVars);
+      snoozing.catch(() => undefined);
+    });
+    let undoing: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      undoing = result.current.unsnooze.mutateAsync({
+        ...vars,
+        dueOn: today,
+        restore: todayItem,
+        afterSnooze: snoozing,
+      });
+    });
+    await act(async () => {
+      gate.reject(new ApiError('NETWORK', 0));
+      await expect(undoing).resolves.toBeUndefined();
+    });
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([todayItem]);
+    expect(qc.getQueryData(queryKeys.topic('t1'))).toEqual(topic);
+  });
+
+  it('a refetch while the undo is saved keeps the row restored', async () => {
+    const gate = deferred<unknown>();
+    const post = jest.fn(() => gate.promise);
+    const { qc, today } = setup(post);
+    // The server still has the snooze until the undo lands.
+    const get = jest.fn().mockResolvedValue({ items: [moved] });
+    const http = { get, post, patch: jest.fn(), del: jest.fn() } as Http;
+    const wrap = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>
+        <ApiProvider http={http}>{children}</ApiProvider>
+      </QueryClientProvider>
+    );
+    qc.setQueryData(queryKeys.agenda(today, 30), [moved]);
+    const { result, unmount } = await renderHook(
+      () => ({
+        agenda: useAgenda(30, today),
+        unsnooze: useUnsnoozeRevision('t1'),
+      }),
+      { wrapper: wrap },
+    );
+    cleanups.push(unmount, () => gate.resolve({}));
+    await act(async () => {
+      result.current.unsnooze.mutate({
+        ...vars,
+        dueOn: today,
+        restore: todayItem,
+      });
+    });
+    await waitFor(() =>
+      expect(result.current.agenda.data).toEqual([todayItem]),
+    );
+    await act(async () => {
+      await result.current.agenda.refetch();
+    });
+    expect(qc.getQueryData(queryKeys.agenda(today, 30))).toEqual([moved]);
+    await waitFor(() =>
+      expect(result.current.agenda.data).toEqual([todayItem]),
+    );
   });
 });
 

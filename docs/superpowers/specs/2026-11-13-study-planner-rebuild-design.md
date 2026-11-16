@@ -153,6 +153,7 @@ apps/api/
   - `POST /topics/:id/revisions/:revId/complete {doneOn}`
   - `POST …/undo`
   - `POST …/snooze {days=1}`
+  - `POST …/unsnooze {dueOn}`: undoes a snooze. `dueOn` is the date the revision showed before it; it must fall between the planned date and the current due date (next pending revision only).
 - `GET /agenda?today=YYYY-MM-DD&days=N` returns overdue, today and upcoming next-due revisions. It feeds Home, Schedule and the reminder snapshot.
 - `GET/POST/PATCH/DELETE /mock-tests`.
 - `GET /stats`.

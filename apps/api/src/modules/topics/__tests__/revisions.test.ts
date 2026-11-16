@@ -171,6 +171,108 @@ describe('revisions', () => {
     expect(res.body.revisions[0].dueOn).toBe('2026-11-06');
   });
 
+  it('undoes a snooze and puts back the planned date', async () => {
+    const { app, h, revs, base } = await setup('rv-unsnooze');
+    const snoozed = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[0]!.id}/snooze`,
+      { today: '2026-11-20' },
+    );
+    expect(snoozed.body.revisions[0].dueOn).toBe('2026-11-21');
+    const res = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[0]!.id}/unsnooze`,
+      { dueOn: '2026-11-05' },
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.revisions.map((r: Rev) => r.dueOn)).toEqual(
+      revs.map(r => r.dueOn),
+    );
+    expect(res.body.nextDueOn).toBe('2026-11-05');
+    const got = await request(app).get(base).set(h);
+    expect(got.body).toEqual(res.body);
+    // Asking again with the same date changes nothing.
+    const again = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[0]!.id}/unsnooze`,
+      { dueOn: '2026-11-05' },
+    );
+    expect(again.status).toBe(200);
+    expect(again.body.revisions).toEqual(res.body.revisions);
+  });
+
+  it('undoes a second snooze back to the first snooze date', async () => {
+    const { app, h, revs, base } = await setup('rv-unsnooze-twice');
+    const url = `${base}/revisions/${revs[0]!.id}`;
+    await post(app, h, `${url}/snooze`, { today: '2026-11-05' });
+    await post(app, h, `${url}/snooze`, { today: '2026-11-06', days: 2 });
+    const res = await post(app, h, `${url}/unsnooze`, { dueOn: '2026-11-06' });
+    expect(res.status).toBe(200);
+    expect(res.body.revisions[0].dueOn).toBe('2026-11-06');
+  });
+
+  it('rejects an unsnooze date that is later, too early or invalid', async () => {
+    const { app, h, revs, base } = await setup('rv-unsnooze-bad');
+    const url = `${base}/revisions/${revs[0]!.id}/unsnooze`;
+    await post(app, h, `${base}/revisions/${revs[0]!.id}/snooze`, {
+      today: '2026-11-05',
+    });
+    for (const body of [
+      { dueOn: '2026-11-07' },
+      { dueOn: '2026-11-04' },
+      { dueOn: '2026-02-30' },
+      { dueOn: null },
+      {},
+    ]) {
+      const res = await post(app, h, url, body);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    }
+    const got = await request(app).get(base).set(h);
+    expect(got.body.revisions[0].dueOn).toBe('2026-11-06');
+  });
+
+  it('rejects an unsnooze of a revision that is not next', async () => {
+    const { app, h, revs, base } = await setup('rv-unsnooze-order');
+    const res = await post(
+      app,
+      h,
+      `${base}/revisions/${revs[1]!.id}/unsnooze`,
+      {
+        dueOn: '2026-11-08',
+      },
+    );
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('REVISION_OUT_OF_ORDER');
+    const unknown = await post(app, h, `${base}/revisions/nope/unsnooze`, {
+      dueOn: '2026-11-08',
+    });
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it("hides another user's topic from unsnooze", async () => {
+    const ctx = build();
+    const a = await setup('rv-unsnooze-owner', ctx);
+    await post(ctx.app, a.h, `${a.base}/revisions/${a.revs[0]!.id}/snooze`, {
+      today: '2026-11-20',
+    });
+    const b = await signIn(ctx.app, 'rv-unsnooze-other');
+    const res = await post(
+      ctx.app,
+      bearer(b.accessToken),
+      `${a.base}/revisions/${a.revs[0]!.id}/unsnooze`,
+      { dueOn: '2026-11-05' },
+    );
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    const got = await request(ctx.app).get(a.base).set(a.h);
+    expect(got.body.revisions[0].dueOn).toBe('2026-11-21');
+  });
+
   it('completes the topic when every revision is done', async () => {
     const { app, h, revs, base } = await setup('rv-all');
     let last;

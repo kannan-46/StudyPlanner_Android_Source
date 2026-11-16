@@ -26,4 +26,13 @@ describe('feature apis', () => {
       days: 1,
     });
   });
+
+  it('revisionsApi.unsnooze posts the date to go back to', async () => {
+    const http = fakeHttp();
+    await makeRevisionsApi(http).unsnooze('t', 'r', '2026-11-13');
+    expect(http.post).toHaveBeenCalledWith(
+      '/v1/topics/t/revisions/r/unsnooze',
+      { dueOn: '2026-11-13' },
+    );
+  });
 });

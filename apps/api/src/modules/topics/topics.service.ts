@@ -4,6 +4,7 @@ import {
   completeRevision,
   snoozeRevision,
   undoRevision,
+  unsnoozeRevision,
   createSchedule,
   reconcileSchedule,
   type TopicCreateInput,
@@ -94,6 +95,19 @@ export function createTopicsService(deps: AppDeps) {
       return toTopicView(
         await mutateWithRetry(userId, id, d =>
           snoozeRevision(scheduleOf(d), revisionId, today, days),
+        ),
+      );
+    },
+
+    async unsnoozeRevision(
+      userId: ObjectId,
+      id: string,
+      revisionId: string,
+      dueOn: string,
+    ): Promise<TopicView> {
+      return toTopicView(
+        await mutateWithRetry(userId, id, d =>
+          unsnoozeRevision(scheduleOf(d), revisionId, dueOn),
         ),
       );
     },

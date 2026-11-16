@@ -6,7 +6,11 @@ import {
   nameSchema,
 } from '../common';
 import { mockTestInputSchema } from '../mockTests';
-import { snoozeRevisionSchema, topicUpdateSchema } from '../topics';
+import {
+  snoozeRevisionSchema,
+  topicUpdateSchema,
+  unsnoozeRevisionSchema,
+} from '../topics';
 
 describe('intervalsSchema', () => {
   it('accepts increasing intervals', () => {
@@ -56,6 +60,20 @@ describe('schemas', () => {
     expect(
       snoozeRevisionSchema.safeParse({ today: '2025-01-01', days: 31 }).success,
     ).toBe(false);
+  });
+  it('unsnooze needs a valid date', () => {
+    expect(unsnoozeRevisionSchema.parse({ dueOn: '2025-01-01' })).toEqual({
+      dueOn: '2025-01-01',
+    });
+    for (const body of [
+      {},
+      { dueOn: null },
+      { dueOn: '2025-02-30' },
+      { dueOn: '2025-01-01T00:00:00Z' },
+      { dueOn: 20250101 },
+    ]) {
+      expect(unsnoozeRevisionSchema.safeParse(body).success).toBe(false);
+    }
   });
   it('error codes have 4xx/5xx statuses', () => {
     for (const c of Object.values(ERROR_CODES)) {

@@ -48,3 +48,7 @@ export const snoozeRevisionSchema = z.object({
   days: z.number().int().min(1).max(30).default(1),
 });
 export type SnoozeRevisionInput = z.infer<typeof snoozeRevisionSchema>;
+
+/** The date the revision showed before the snooze being undone. */
+export const unsnoozeRevisionSchema = z.object({ dueOn: localDateSchema });
+export type UnsnoozeRevisionInput = z.infer<typeof unsnoozeRevisionSchema>;

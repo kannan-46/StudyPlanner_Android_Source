@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { completeRevisionSchema, snoozeRevisionSchema } from '@planner/shared';
+import {
+  completeRevisionSchema,
+  snoozeRevisionSchema,
+  unsnoozeRevisionSchema,
+} from '@planner/shared';
 import type { AppDeps } from '../../core/deps';
 import { validate } from '../../core/middleware/validate';
 import { createTopicsController } from './topics.controller';
@@ -18,6 +22,11 @@ export function revisionsRouter(deps: AppDeps): Router {
     '/:revisionId/snooze',
     validate(snoozeRevisionSchema, 'body'),
     c.snoozeRevision,
+  );
+  router.post(
+    '/:revisionId/unsnooze',
+    validate(unsnoozeRevisionSchema, 'body'),
+    c.unsnoozeRevision,
   );
   return router;
 }

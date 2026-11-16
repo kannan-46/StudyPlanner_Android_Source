@@ -7,17 +7,18 @@ import { useLocalToday } from '../../shared/lib/useLocalToday';
 import { placeInAgenda } from './cache';
 
 type RevisionChange = {
-  kind: 'complete' | 'undo' | 'snooze';
+  kind: 'complete' | 'undo' | 'snooze' | 'unsnooze';
   topicId: string;
   revisionId: string;
   at: number;
-  /** The row the change shows meanwhile (an Undo's restore, a snooze). */
+  /** The row the change shows meanwhile (an Undo's restore, a (un)snooze). */
   place?: AgendaItem;
 };
 
 /**
  * What a revision change still being saved shows in the agenda: a Done hides
- * its row, an Undo puts its row back, a Snooze shows its row moved.
+ * its row, an Undo puts its row back, a Snooze (or its undo) shows its row
+ * moved.
  */
 export type PendingOverlay =
   | { topicId: string; hide: string }
@@ -40,15 +41,15 @@ function usePendingOverlays(): string {
         restore?: AgendaItem;
       };
       const k = m.options.mutationKey?.[1];
-      const kind = k === 'undo' || k === 'snooze' ? k : 'complete';
+      const kind =
+        k === 'undo' || k === 'snooze' || k === 'unsnooze' ? k : 'complete';
       const ctx = m.state.context as { placed?: AgendaItem } | undefined;
       return {
         kind,
         topicId: v.topicId,
         revisionId: v.revisionId,
         at: m.state.submittedAt,
-        place:
-          kind === 'undo' ? v.restore : kind === 'snooze' ? ctx?.placed : undefined,
+        place: kind === 'undo' ? v.restore : ctx?.placed,
       };
     },
   });

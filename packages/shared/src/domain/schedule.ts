@@ -247,3 +247,39 @@ export function snoozeRevision(
     dueOverride: addDays(base, days),
   });
 }
+
+/**
+ * Undo a snooze: put the next pending revision back on `dueOn`, the date it
+ * showed before the snooze (its planned date, or an earlier snooze date).
+ * An undo only moves a revision earlier, and never before its planned date
+ * (counted from the previous done date or the study date), so a stale or
+ * forged date cannot pull the chain back past the move-forward rule.
+ */
+export function unsnoozeRevision(
+  input: ScheduleInput,
+  revisionId: string,
+  dueOn: LocalDate,
+): ScheduleResult {
+  assertDate(dueOn, 'dueOn');
+  assertFirstPending(input, revisionId);
+  const due = (dueOverride: LocalDate | null) =>
+    rebuildSchedule({
+      ...input,
+      revisions: input.revisions.map(r =>
+        r.id === revisionId ? { ...r, dueOverride } : r,
+      ),
+    }).revisions.find(r => r.id === revisionId)?.dueOn as LocalDate;
+  const current = due(
+    input.revisions.find(r => r.id === revisionId)?.dueOverride ?? null,
+  );
+  const planned = due(null);
+  if (compareDates(dueOn, current) > 0) {
+    fail('VALIDATION_FAILED', `dueOn cannot be after ${current}`);
+  }
+  if (compareDates(dueOn, planned) < 0) {
+    fail('VALIDATION_FAILED', `dueOn cannot be before ${planned}`);
+  }
+  return patchRevision(input, revisionId, {
+    dueOverride: dueOn === planned ? null : dueOn,
+  });
+}

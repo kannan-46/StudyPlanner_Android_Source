@@ -5,6 +5,7 @@ import type {
   TopicCreateInput,
   TopicListQuery,
   TopicUpdateInput,
+  UnsnoozeRevisionInput,
 } from '@planner/shared';
 import type { AppDeps } from '../../core/deps';
 import { asyncHandler } from '../../core/http/async-handler';
@@ -77,6 +78,17 @@ export function createTopicsController(deps: AppDeps) {
           req.params.revisionId as string,
           today,
           days,
+        ),
+      );
+    }),
+    unsnoozeRevision: asyncHandler(async (req, res) => {
+      const { dueOn } = res.locals.input as UnsnoozeRevisionInput;
+      res.json(
+        await service.unsnoozeRevision(
+          res.locals.userId as ObjectId,
+          req.params.id as string,
+          req.params.revisionId as string,
+          dueOn,
         ),
       );
     }),

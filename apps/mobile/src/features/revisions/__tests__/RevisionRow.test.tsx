@@ -425,6 +425,93 @@ describe('RevisionRow snooze', () => {
     await waitFor(() => expect(http.post).toHaveBeenCalledTimes(2));
     expect(http.post.mock.calls[1]![0]).toMatch(/snooze$/);
   });
+
+  it('Undo puts the snoozed revision back on the date it showed', async () => {
+    const http = makeHttp();
+    const overdue = addDays(today, -3);
+    http.post.mockResolvedValue({});
+    await renderWithProviders(row({ dueOn: overdue }), http);
+    await fireEvent.press(screen.getByText('Snooze 1 day'));
+    expect(
+      await screen.findByText('Hernia · revision 2 snoozed to tomorrow'),
+    ).toBeOnTheScreen();
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(1));
+    await fireEvent.press(screen.getByText('Undo'));
+    expect(
+      await screen.findByText('Hernia · revision 2 snooze undone'),
+    ).toBeOnTheScreen();
+    expect(http.post).toHaveBeenLastCalledWith(
+      '/v1/topics/T1/revisions/R2/unsnooze',
+      { dueOn: overdue },
+    );
+  });
+
+  it('an Undo tapped before the snooze is saved waits for it', async () => {
+    const http = makeHttp();
+    const gate = deferred<unknown>();
+    http.post.mockReturnValueOnce(gate.promise).mockResolvedValue({});
+    await renderWithProviders(row(), http);
+    await fireEvent.press(screen.getByText('Snooze 1 day'));
+    await fireEvent.press(screen.getByText('Undo'));
+    expect(http.post).toHaveBeenCalledTimes(1);
+    expect(http.post.mock.calls[0]![0]).toMatch(/snooze$/);
+    await act(async () =>
+      gate.resolve({
+        revisions: [
+          rev({ dueOn: addDays(today, 1), dueOverride: addDays(today, 1) }),
+        ],
+      }),
+    );
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(2));
+    expect(http.post.mock.calls[1]).toEqual([
+      '/v1/topics/T1/revisions/R2/unsnooze',
+      { dueOn: today },
+    ]);
+    expect(
+      await screen.findByText('Hernia · revision 2 snooze undone'),
+    ).toBeOnTheScreen();
+    // The saved snooze does not bring its snackbar back.
+    expect(screen.queryByText(/snoozed to/)).toBeNull();
+  });
+
+  it('an early Undo of a snooze that fails sends nothing more', async () => {
+    const http = makeHttp();
+    const gate = deferred<unknown>();
+    http.post.mockReturnValueOnce(gate.promise);
+    await renderWithProviders(row(), http);
+    await fireEvent.press(screen.getByText('Snooze 1 day'));
+    await fireEvent.press(screen.getByText('Undo'));
+    await act(async () => gate.reject(new ApiError('NETWORK', 0)));
+    expect(
+      await screen.findByText('Hernia · revision 2 snooze undone'),
+    ).toBeOnTheScreen();
+    expect(http.post).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Retry')).toBeNull();
+  });
+
+  it('a failed Undo of a snooze offers Retry, which tries again', async () => {
+    const http = makeHttp();
+    http.post
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new ApiError('NETWORK', 0))
+      .mockResolvedValueOnce({});
+    await renderWithProviders(row(), http);
+    await fireEvent.press(screen.getByText('Snooze 1 day'));
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(1));
+    await fireEvent.press(await screen.findByText('Undo'));
+    expect(
+      await screen.findByText("Can't reach the server — try again"),
+    ).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Retry'));
+    await waitFor(() => expect(http.post).toHaveBeenCalledTimes(3));
+    expect(http.post.mock.calls[2]).toEqual([
+      '/v1/topics/T1/revisions/R2/unsnooze',
+      { dueOn: today },
+    ]);
+    expect(
+      await screen.findByText('Hernia · revision 2 snooze undone'),
+    ).toBeOnTheScreen();
+  });
 });
 
 describe('RevisionRow slow saves', () => {
@@ -495,9 +582,7 @@ describe('Undo of a revision done on an earlier day', () => {
       screen.getByText(`Revision 1 of 4 · Done ${label(doneEarlier)}`),
     ).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Undo'));
-    expect(
-      screen.getByText('Mark revision 1 as not done?'),
-    ).toBeOnTheScreen();
+    expect(screen.getByText('Mark revision 1 as not done?')).toBeOnTheScreen();
     expect(
       screen.getByText(new RegExp(`done on ${label(doneEarlier)}`)),
     ).toBeOnTheScreen();

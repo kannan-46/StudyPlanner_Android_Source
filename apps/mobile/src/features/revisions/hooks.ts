@@ -9,6 +9,7 @@ import {
   maxDate,
   snoozeRevision,
   undoRevision,
+  unsnoozeRevision,
   type AgendaItem,
   type LocalDate,
   type TopicView,
@@ -49,14 +50,30 @@ export interface SnoozeVars {
   days: number;
 }
 
+export interface UnsnoozeVars {
+  topicId: string;
+  revisionId: string;
+  /** The date the revision showed before the snooze; it goes back to it. */
+  dueOn: LocalDate;
+  /** The agenda row as it was before the snooze; it comes back at once. */
+  restore?: AgendaItem;
+  /**
+   * The snooze this takes back, when it was tapped before the snooze was
+   * saved. If that snooze fails there is nothing to undo and no request is
+   * sent.
+   */
+  afterSnooze?: Promise<unknown>;
+}
+
 /** Keys of the optimistic revision changes (the agenda keeps them shown). */
 export const revisionKeys = {
   complete: ['revision', 'complete'] as const,
   undo: ['revision', 'undo'] as const,
   snooze: ['revision', 'snooze'] as const,
+  unsnooze: ['revision', 'unsnooze'] as const,
 };
 
-/** What a snooze's onMutate saved; `placed` is the row it moved. */
+/** What a snooze's or unsnooze's onMutate saved; `placed` is the row it moved. */
 export type SnoozeContext = MutationContext & { placed?: AgendaItem };
 
 type MutationContext = {
@@ -93,7 +110,10 @@ function queuedBehind(qc: QueryClient, topicId: string): boolean {
  * False once the user signed out after the change started (or its reply was
  * dropped for that reason): nothing may touch the next session's cache.
  */
-function stillSignedIn(ctx: { session: SessionEpoch } | undefined, e?: unknown) {
+function stillSignedIn(
+  ctx: { session: SessionEpoch } | undefined,
+  e?: unknown,
+) {
   if (e !== undefined && e !== null && isSessionEndedError(e)) return false;
   return !ctx || isCurrentSession(ctx.session);
 }
@@ -299,6 +319,70 @@ export function useSnoozeRevision(topicId?: string) {
         ...row,
         dueOn: addDays(maxDate(v.today, row.dueOn), v.days),
       };
+      placeInAllAgendas(qc, v.topicId, placed);
+      return { ...ctx, placed };
+    },
+    onSuccess: (res, v, ctx) => {
+      if (!stillSignedIn(ctx) || !isTopic(res)) return;
+      if (queuedBehind(qc, v.topicId)) return;
+      showSaved(
+        qc,
+        res,
+        v.topicId,
+        ctx.placed ?? agendaRowOf(ctx.prevAgenda, v.topicId),
+      );
+    },
+    onError: (e, _v, ctx) => {
+      if (stillSignedIn(ctx, e)) rollBack(qc, ctx);
+    },
+    onSettled: refreshAfter(qc),
+  });
+}
+
+/**
+ * Undoes a snooze: the revision goes back to the date it showed before (the
+ * row back under Today on Home, the old date on Topic detail) at once. Runs
+ * in the topic's scope, so an Undo tapped while the snooze is still saving
+ * waits for it, and sends nothing if the snooze failed. A failure puts the
+ * snoozed state back.
+ */
+export function useUnsnoozeRevision(topicId?: string) {
+  const { revisions } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: revisionKeys.unsnooze,
+    scope: topicScope(topicId),
+    mutationFn: async (v: UnsnoozeVars) => {
+      if (v.afterSnooze) {
+        const saved = await v.afterSnooze.then(
+          () => true,
+          () => false,
+        );
+        // The snooze failed and was rolled back: already as Undo wants it.
+        if (!saved) return undefined;
+      }
+      return revisions.unsnooze(v.topicId, v.revisionId, v.dueOn);
+    },
+    onMutate: async (v): Promise<SnoozeContext> => {
+      const ctx = await saveCaches(qc, v.topicId);
+      if (ctx.prevTopic) {
+        try {
+          const next = unsnoozeRevision(ctx.prevTopic, v.revisionId, v.dueOn);
+          qc.setQueryData<TopicView>(ctx.topicKey, {
+            ...ctx.prevTopic,
+            ...next,
+          });
+        } catch {
+          // Not applicable locally; the server decides.
+        }
+      }
+      const row = agendaRowOf(ctx.prevAgenda, v.topicId);
+      const placed =
+        v.restore ??
+        (row && row.revisionId === v.revisionId
+          ? { ...row, dueOn: v.dueOn }
+          : undefined);
+      if (!placed) return ctx;
       placeInAllAgendas(qc, v.topicId, placed);
       return { ...ctx, placed };
     },

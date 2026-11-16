@@ -5,6 +5,7 @@ import {
   rebuildSchedule,
   snoozeRevision,
   undoRevision,
+  unsnoozeRevision,
   type ScheduleInput,
   type ScheduleResult,
 } from '../schedule';
@@ -155,6 +156,78 @@ describe('schedule', () => {
     expect(() => snoozeRevision(input0(), 'r2', '2026-11-20', 1)).toThrow(
       code('REVISION_OUT_OF_ORDER'),
     );
+  });
+
+  it('unsnooze puts a snoozed revision back on its planned date', () => {
+    const s = snoozeRevision(input0(), 'r1', '2026-11-05', 1);
+    expect(s.revisions[0]!.dueOn).toBe('2026-11-06');
+    const u = unsnoozeRevision(s_input(s), 'r1', '2026-11-05');
+    expect(u.revisions[0]!.dueOverride).toBeNull();
+    expect(u).toEqual(rebuildSchedule(input0()));
+  });
+
+  it('unsnooze restores an overdue date and the later chain', () => {
+    const s = snoozeRevision(input0(), 'r1', '2026-11-20', 1);
+    expect(dues(s)[1]).toBe('2026-11-24');
+    const u = unsnoozeRevision(s_input(s), 'r1', '2026-11-05');
+    expect(dues(u)).toEqual(dues(rebuildSchedule(input0())));
+    expect(u.nextDueOn).toBe('2026-11-05');
+  });
+
+  it('unsnooze goes back to an earlier snooze date', () => {
+    const a = snoozeRevision(input0(), 'r1', '2026-11-05', 1);
+    const b = snoozeRevision(s_input(a), 'r1', '2026-11-06', 2);
+    expect(b.revisions[0]!.dueOn).toBe('2026-11-08');
+    const u = unsnoozeRevision(s_input(b), 'r1', '2026-11-06');
+    expect(u.revisions[0]!.dueOverride).toBe('2026-11-06');
+    expect(u.revisions[0]!.dueOn).toBe('2026-11-06');
+  });
+
+  it('unsnooze counts the planned date from the previous done date', () => {
+    const a = completeRevision(input0(), 'r1', '2026-11-12');
+    const b = snoozeRevision(s_input(a), 'r2', '2026-11-15', 1);
+    const u = unsnoozeRevision(s_input(b), 'r2', '2026-11-15');
+    expect(u.revisions[1]!.dueOverride).toBeNull();
+    expect(dues(u)).toEqual(dues(a));
+    expect(() => unsnoozeRevision(s_input(b), 'r2', '2026-11-14')).toThrow(
+      code('VALIDATION_FAILED'),
+    );
+  });
+
+  it('unsnooze with the current date changes nothing', () => {
+    const s = snoozeRevision(input0(), 'r1', '2026-11-05', 1);
+    expect(unsnoozeRevision(s_input(s), 'r1', '2026-11-06')).toEqual(s);
+    const plain = unsnoozeRevision(input0(), 'r1', '2026-11-05');
+    expect(plain).toEqual(rebuildSchedule(input0()));
+  });
+
+  it('unsnooze never moves a revision later or before its planned date', () => {
+    const s = snoozeRevision(input0(), 'r1', '2026-11-05', 1);
+    for (const d of ['2026-11-07', '2026-11-04', '2026-10-31', 'garbage']) {
+      expect(() => unsnoozeRevision(s_input(s), 'r1', d)).toThrow(
+        code('VALIDATION_FAILED'),
+      );
+    }
+  });
+
+  it('unsnooze only works on the next pending revision', () => {
+    const a = completeRevision(input0(), 'r1', '2026-11-05');
+    expect(() => unsnoozeRevision(s_input(a), 'r1', '2026-11-05')).toThrow(
+      code('REVISION_OUT_OF_ORDER'),
+    );
+    expect(() => unsnoozeRevision(s_input(a), 'r3', '2026-11-16')).toThrow(
+      code('REVISION_OUT_OF_ORDER'),
+    );
+    expect(() => unsnoozeRevision(s_input(a), 'nope', '2026-11-08')).toThrow(
+      code('REVISION_NOT_FOUND'),
+    );
+  });
+
+  it('unsnooze does not mutate its input', () => {
+    const i = s_input(snoozeRevision(input0(), 'r1', '2026-11-05', 1));
+    const copy = JSON.parse(JSON.stringify(i));
+    unsnoozeRevision(i, 'r1', '2026-11-05');
+    expect(i).toEqual(copy);
   });
 
   it('marks completed when all done and nextDueOn null', () => {

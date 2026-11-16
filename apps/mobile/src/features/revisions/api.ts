@@ -19,5 +19,8 @@ export function makeRevisionsApi(http: Http) {
         today,
         days,
       }),
+    /** Undoes a snooze: `dueOn` is the date the revision showed before it. */
+    unsnooze: (topicId: string, revisionId: string, dueOn: string) =>
+      http.post<TopicView>(`${base(topicId, revisionId)}/unsnooze`, { dueOn }),
   };
 }
