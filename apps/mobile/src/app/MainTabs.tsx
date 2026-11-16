@@ -13,12 +13,13 @@ import { TopicsScreen } from '../features/topics/TopicsScreen';
 import { ProgressScreen } from '../features/progress/ProgressScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { useReminderSnapshotSync } from '../features/agenda/useReminderSnapshotSync';
+import type { TopicsFilterParams } from '../features/subjects/showTopics';
 import { TAB_TITLES } from './tabTitles';
 
 export type MainTabParamList = {
   Home: undefined;
   Schedule: undefined;
-  Topics: undefined;
+  Topics: TopicsFilterParams | undefined;
   Progress: undefined;
   Settings: undefined;
 };

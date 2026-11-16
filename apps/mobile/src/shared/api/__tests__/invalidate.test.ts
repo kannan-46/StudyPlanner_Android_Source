@@ -121,5 +121,18 @@ it('exam and subject changes can skip reloading topics', async () => {
     ['exams'],
     ['subjects'],
     ['topics'],
+    ['topic'],
   ]);
+});
+
+it('topic changes mark subjects stale without reloading them', async () => {
+  const qc = client();
+  const subjectsFn = jest.fn(async () => []);
+  const stop = watch(qc, ['subjects'], subjectsFn);
+  await new Promise<void>(r => setTimeout(() => r(), 0));
+  const calls = subjectsFn.mock.calls.length;
+  await refreshTopicData(qc, 't1');
+  expect(subjectsFn).toHaveBeenCalledTimes(calls);
+  expect(qc.getQueryState(['subjects'])?.isInvalidated).toBe(true);
+  stop();
 });

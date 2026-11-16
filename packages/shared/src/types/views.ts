@@ -66,7 +66,14 @@ export interface StatsView {
   revisionsPending: number;
   overdue: number;
   dueToday: number;
-  bySubject: { subjectId: string; name: string; topicCount: number }[];
+  bySubject: {
+    subjectId: string;
+    name: string;
+    topicCount: number;
+    /** Added after app 4.2.0; an older server leaves these out. */
+    revisionsDone?: number;
+    revisionsPending?: number;
+  }[];
   byExam: { examId: string; name: string; topicCount: number }[];
 }
 

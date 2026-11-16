@@ -190,6 +190,20 @@ export function createTopicsService(deps: AppDeps) {
               ],
             });
           }
+          const doneCount = current.revisions.filter(
+            r => r.doneOn !== null,
+          ).length;
+          if (intervals.length < doneCount) {
+            throw new AppError('VALIDATION_FAILED', {
+              details: [
+                {
+                  path: ['intervals'],
+                  message:
+                    'intervals cannot have fewer entries than completed revisions',
+                },
+              ],
+            });
+          }
           const schedule = reconcileSchedule(
             {
               studiedOn: current.studiedOn,

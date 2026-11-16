@@ -226,6 +226,8 @@ describe('topics', () => {
       .send({ intervals: [4, 7] });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    // Names the field, so the app can point at the intervals.
+    expect(res.body.error.details[0].path).toEqual(['intervals']);
     const ok = await request(app)
       .patch(`/v1/topics/${t.body.id}`)
       .set(h)

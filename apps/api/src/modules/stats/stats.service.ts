@@ -40,7 +40,12 @@ export function createStatsService(deps: AppDeps) {
         .collection<TopicDoc>('topics')
         .aggregate<{
           totals: Totals[];
-          subjects: { _id: ObjectId; n: number }[];
+          subjects: {
+            _id: ObjectId;
+            n: number;
+            done: number;
+            pending: number;
+          }[];
           exams: { _id: ObjectId; n: number }[];
         }>([
           { $match: { userId } },
@@ -71,7 +76,16 @@ export function createStatsService(deps: AppDeps) {
                   },
                 },
               ],
-              subjects: [{ $group: { _id: '$subjectId', n: { $sum: 1 } } }],
+              subjects: [
+                {
+                  $group: {
+                    _id: '$subjectId',
+                    n: { $sum: 1 },
+                    done: countRevisions('$ne'),
+                    pending: countRevisions('$eq'),
+                  },
+                },
+              ],
               exams: [
                 { $unwind: '$examIds' },
                 { $group: { _id: '$examIds', n: { $sum: 1 } } },
@@ -82,7 +96,7 @@ export function createStatsService(deps: AppDeps) {
         .toArray();
       const t = agg?.totals[0];
       const subjectCounts = new Map(
-        (agg?.subjects ?? []).map(s => [String(s._id), s.n]),
+        (agg?.subjects ?? []).map(s => [String(s._id), s]),
       );
       const examCounts = new Map(
         (agg?.exams ?? []).map(s => [String(s._id), s.n]),
@@ -100,11 +114,16 @@ export function createStatsService(deps: AppDeps) {
         overdue: t?.overdue ?? 0,
         dueToday: t?.dueToday ?? 0,
         bySubject: subjects
-          .map(s => ({
-            subjectId: s._id.toHexString(),
-            name: s.name,
-            topicCount: subjectCounts.get(String(s._id)) ?? 0,
-          }))
+          .map(s => {
+            const c = subjectCounts.get(String(s._id));
+            return {
+              subjectId: s._id.toHexString(),
+              name: s.name,
+              topicCount: c?.n ?? 0,
+              revisionsDone: c?.done ?? 0,
+              revisionsPending: c?.pending ?? 0,
+            };
+          })
           .sort(byName),
         byExam: exams
           .map(e => ({

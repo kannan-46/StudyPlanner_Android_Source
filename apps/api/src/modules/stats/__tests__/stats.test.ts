@@ -72,9 +72,26 @@ describe('stats', () => {
       dueToday: 1,
     });
     expect(res.body.bySubject).toEqual([
-      { subjectId: anat.id, name: 'Anatomy', topicCount: 3 },
-      expect.objectContaining({ name: 'Empty', topicCount: 0 }),
-      { subjectId: phys.id, name: 'Physio', topicCount: 2 },
+      {
+        subjectId: anat.id,
+        name: 'Anatomy',
+        topicCount: 3,
+        revisionsDone: 1,
+        revisionsPending: 3,
+      },
+      expect.objectContaining({
+        name: 'Empty',
+        topicCount: 0,
+        revisionsDone: 0,
+        revisionsPending: 0,
+      }),
+      {
+        subjectId: phys.id,
+        name: 'Physio',
+        topicCount: 2,
+        revisionsDone: 0,
+        revisionsPending: 2,
+      },
     ]);
     expect(res.body.byExam).toEqual([
       expect.objectContaining({ name: 'Aaa', topicCount: 0 }),

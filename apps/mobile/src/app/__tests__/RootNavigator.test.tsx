@@ -35,6 +35,7 @@ import { spacing } from '../../shared/ui/theme';
 import { MainTabs } from '../MainTabs';
 import { TAB_TITLES } from '../tabTitles';
 import { linking } from '../linking';
+import { updateAvailableText } from '../../features/appUpdate/UpdateDialog';
 
 jest.mock('../../features/auth/AuthProvider', () => ({
   useAuth: jest.fn(),
@@ -268,7 +269,7 @@ it('shows the update dialog in a centred modal, not at the top, when offline', a
   await setup();
   const dialog = await screen.findByTestId('update-dialog');
   expect(screen.getByText('Update available')).toBeTruthy();
-  expect(screen.getByText('Version 4.2.0 is ready to install.')).toBeTruthy();
+  expect(screen.getByText(updateAvailableText('4.2.0'))).toBeTruthy();
   expect(modalAround(dialog)).toBeTruthy();
   // The offline banner stays at the top on its own, outside the dialog.
   const offline = screen.getByText(OFFLINE_TEXT);

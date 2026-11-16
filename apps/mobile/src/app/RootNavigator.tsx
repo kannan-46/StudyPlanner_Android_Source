@@ -43,7 +43,7 @@ export const SPLASH_HINT_TEXT = 'Still loading — this can take a few seconds';
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
-  TopicForm: { topicId?: string } | undefined;
+  TopicForm: { topicId?: string; examId?: string } | undefined;
   TopicDetail: { topicId: string };
   ReminderHealth: undefined;
   ManageExamsSubjects: undefined;

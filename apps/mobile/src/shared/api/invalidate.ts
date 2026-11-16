@@ -21,7 +21,11 @@ export type TopicDataOptions = {
   deleted?: boolean;
 };
 
-/** topic or revision changes -> topics, topic(id), agenda, stats */
+/**
+ * topic or revision changes -> topics, topic(id), agenda, stats; subjects are
+ * only marked stale (their topic counts change), so an open form keeps a
+ * subject it has just created while the next screen to show them reloads.
+ */
 export function refreshTopicData(
   qc: QueryClient,
   topicId?: string,
@@ -37,6 +41,7 @@ export function refreshTopicData(
     ),
     qc.invalidateQueries({ queryKey: ['agenda'] }),
     qc.invalidateQueries({ queryKey: ['stats'] }),
+    qc.invalidateQueries({ queryKey: ['subjects'], refetchType: 'none' }),
   ]).then(() => undefined);
 }
 
@@ -58,7 +63,7 @@ export type ExamSubjectDataOptions = {
   topics?: boolean;
 };
 
-/** exam or subject changes -> exams, subjects, (topics) */
+/** exam or subject changes -> exams, subjects, (topics and each topic) */
 export function refreshExamSubjectData(
   qc: QueryClient,
   opts: ExamSubjectDataOptions = {},
@@ -69,6 +74,8 @@ export function refreshExamSubjectData(
   ];
   if (opts.topics !== false) {
     tasks.push(qc.invalidateQueries({ queryKey: ['topics'] }));
+    // The server pulls a deleted exam from every topic: open topics go stale.
+    tasks.push(qc.invalidateQueries({ queryKey: ['topic'] }));
   }
   return Promise.all(tasks).then(() => undefined);
 }
