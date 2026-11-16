@@ -24,7 +24,12 @@ import {
 } from '../../../test/testUtils';
 import { useImportBackup } from '../../backup/hooks';
 import { parseAppVersion } from '../api';
-import { DOWNLOAD_FAILED_TEXT, UpdateDialog } from '../UpdateDialog';
+import {
+  DOWNLOAD_FAILED_TEXT,
+  UPDATE_INSTALL_HINT,
+  UpdateDialog,
+  updateAvailableText,
+} from '../UpdateDialog';
 import { UPDATE_CHECK_STALE_MS, useUpdateCheck } from '../useUpdateCheck';
 
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
@@ -86,7 +91,11 @@ it('shows a centred dialog with notes when the server has a newer version', asyn
   await renderWithProviders(<Harness />, http);
   expect(await screen.findByText('Update available')).toBeTruthy();
   expect(screen.getByRole('header', { name: 'Update available' })).toBeTruthy();
-  expect(screen.getByText('Version 4.2.0 is ready to install.')).toBeTruthy();
+  // Same words as Settings, and says what Download really does.
+  expect(screen.getByText(updateAvailableText('4.2.0'))).toBeTruthy();
+  expect(screen.getByText('Version 4.2.0 is available')).toBeTruthy();
+  expect(screen.getByText(UPDATE_INSTALL_HINT)).toBeTruthy();
+  expect(screen.queryByText(/ready to install/)).toBeNull();
   expect(screen.getByText('Faster sync')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Later' })).toBeTruthy();
@@ -182,9 +191,7 @@ it('Later hides the dialog for that version only, across restarts', async () => 
   // A newer release shows the dialog again.
   const newer = httpWith(async () => release(7));
   await renderWithProviders(<Harness />, newer);
-  expect(
-    await screen.findByText('Version 4.3.0 is ready to install.'),
-  ).toBeTruthy();
+  expect(await screen.findByText('Version 4.3.0 is available')).toBeTruthy();
 });
 
 it('Back works like Later', async () => {
@@ -326,5 +333,50 @@ describe('parseAppVersion', () => {
     { ...release(6), downloadUrl: 'market://details' },
   ])('rejects %p', body => {
     expect(parseAppVersion(body)).toBeNull();
+  });
+});
+
+describe('recheck', () => {
+  function RecheckProbe({ onResult }: { onResult: (r: string) => void }) {
+    const check = useUpdateCheck();
+    return (
+      <>
+        <Text onPress={() => check.recheck().then(onResult)}>recheck</Text>
+        <Text testID="probe">
+          {`${check.checkFailed ? 'failed' : 'ok'}:${
+            check.checkedAt > 0 ? 'answered' : 'none'
+          }`}
+        </Text>
+      </>
+    );
+  }
+
+  it('resolves with latest, update or failed, and never rejects', async () => {
+    let answer: () => Promise<unknown> = async () => release(5);
+    const http = httpWith(() => answer());
+    const results: string[] = [];
+    await renderWithProviders(
+      <RecheckProbe onResult={r => results.push(r)} />,
+      http,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('probe').props.children).toBe('ok:answered'),
+    );
+
+    await fireEvent.press(screen.getByText('recheck'));
+    await waitFor(() => expect(results).toEqual(['latest']));
+
+    answer = async () => release(6);
+    await fireEvent.press(screen.getByText('recheck'));
+    await waitFor(() => expect(results).toEqual(['latest', 'update']));
+
+    answer = async () => {
+      throw new ApiError('NETWORK', 0);
+    };
+    await fireEvent.press(screen.getByText('recheck'));
+    await waitFor(() =>
+      expect(results).toEqual(['latest', 'update', 'failed']),
+    );
+    expect(screen.getByTestId('probe').props.children).toBe('failed:answered');
   });
 });

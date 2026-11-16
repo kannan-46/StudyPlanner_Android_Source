@@ -13,8 +13,9 @@ export const DOWNLOAD_FAILED_TEXT = "Couldn't open the download link";
 export const updateAvailableText = (versionName: string) =>
   `Version ${versionName} is available`;
 
-export const updateReadyText = (versionName: string) =>
-  `Version ${versionName} is ready to install.`;
+/** What happens after Download: the browser saves the APK, then you install it. */
+export const UPDATE_INSTALL_HINT =
+  'Download it, then open the downloaded file to install it.';
 
 /**
  * Centred "Update available" dialog for the main app. Renders nothing unless
@@ -56,8 +57,9 @@ export function UpdateDialog({ check }: { check: UpdateCheck }) {
     >
       <View testID="update-dialog" style={{ gap: spacing.sm }}>
         <Text style={{ color: colors.text, fontSize: 16 }}>
-          {updateReadyText(latest.latestVersionName)}
+          {updateAvailableText(latest.latestVersionName)}
         </Text>
+        <Text style={{ color: colors.muted }}>{UPDATE_INSTALL_HINT}</Text>
         {latest.notes ? (
           <Text style={{ color: colors.muted }}>{latest.notes}</Text>
         ) : null}

@@ -1,122 +1,190 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Text, View } from 'react-native';
-import { parseBackup } from '@planner/shared';
+import {
+  checkBackup,
+  badJsonProblem,
+  findLegacyOverflows,
+} from '@planner/shared';
 import { Button } from '../../shared/ui/Button';
 import { Dialog } from '../../shared/ui/Dialog';
 import { useSnackbar } from '../../shared/ui/Snackbar';
 import { useTheme } from '../../shared/ui/ThemeProvider';
-import { ApiError, userMessage } from '../../shared/api/errors';
-import { pickBackupFile, saveBackupFile } from '../../native/backupFiles';
-import { useExportBackup, useImportBackup } from '../backup/hooks';
+import { canRetry, isSessionEndedError } from '../../shared/api/errors';
+import { pickBackupFile } from '../../native/backupFiles';
+import { useExportToFile, useImportBackup } from '../backup/hooks';
+import {
+  BACKUP_STATUS,
+  TOO_LARGE_TEXT,
+  backupSummary,
+  importErrorMessage,
+  importResultMessage,
+  overflowText,
+  pickErrorMessage,
+  summaryText,
+  tooLargeToUpload,
+  type BackupSummary,
+} from '../backup/messages';
 
 type Step = 'none' | 'mode' | 'exportFirst';
+type Running = null | 'export' | 'import';
 
-const isCancel = (e: unknown) =>
-  (e as { code?: string } | null)?.code === 'E_CANCELLED';
+/** A checked backup file waiting for the user to pick Merge or Replace. */
+type Picked = {
+  data: unknown;
+  summary: BackupSummary;
+  overflow: ReturnType<typeof overflowText>;
+};
+
+/** Long messages (results, errors with Retry) stay a little longer. */
+const RESULT_MS = 8000;
+const RETRY_MS = 10_000;
 
 export function BackupSection() {
   const { colors, spacing } = useTheme();
   const snackbar = useSnackbar();
-  const exporter = useExportBackup();
+  const { exportToFile } = useExportToFile();
   const importer = useImportBackup();
   const [step, setStep] = useState<Step>('none');
-  const dataRef = useRef<unknown>(null);
-  const [busy, setBusy] = useState(false);
-
-  /** Returns true when a file was written. */
-  async function exportFlow(): Promise<boolean> {
-    try {
-      const backup = await exporter.mutateAsync();
-      await saveBackupFile(JSON.stringify(backup, null, 2));
-      snackbar.show({ message: 'Backup saved' });
-      return true;
-    } catch (e) {
-      if (!isCancel(e)) {
-        snackbar.show({
-          message:
-            e instanceof ApiError
-              ? userMessage(e)
-              : "Couldn't save the backup file",
-        });
-      }
-      return false;
-    }
-  }
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [running, setRunning] = useState<Running>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   async function runExport() {
-    setBusy(true);
+    setRunning('export');
+    setStatus(BACKUP_STATUS.exporting);
     try {
-      await exportFlow();
+      const out = await exportToFile();
+      if (out.status === 'saved') snackbar.show({ message: 'Backup saved' });
+      else if (out.status === 'failed') snackbar.show({ message: out.message });
     } finally {
-      setBusy(false);
+      setRunning(null);
+      setStatus(null);
     }
   }
 
   async function startImport() {
-    setBusy(true);
+    setRunning('import');
     try {
       let text: string;
       try {
         text = await pickBackupFile();
       } catch (e) {
-        if (!isCancel(e)) {
-          snackbar.show({ message: "Couldn't read the backup file" });
-        }
+        const message = pickErrorMessage(e);
+        if (message) snackbar.show({ message, durationMs: RESULT_MS });
         return;
       }
-      let parsed: unknown;
+      let raw: unknown;
       try {
-        parsed = JSON.parse(text);
-        parseBackup(parsed);
+        raw = JSON.parse(text);
       } catch {
-        snackbar.show({ message: 'This file is not a Study Planner backup' });
+        snackbar.show({
+          message: badJsonProblem().description,
+          durationMs: RESULT_MS,
+        });
         return;
       }
-      dataRef.current = parsed;
+      const check = checkBackup(raw);
+      if (!check.ok) {
+        snackbar.show({
+          message: check.problems[0].description,
+          durationMs: RESULT_MS,
+        });
+        return;
+      }
+      // The server cannot receive a request this large: say so now, before
+      // the user chooses how to import it.
+      if (tooLargeToUpload(raw)) {
+        snackbar.show({ message: TOO_LARGE_TEXT, durationMs: RESULT_MS });
+        return;
+      }
+      setPicked({
+        data: raw,
+        summary: backupSummary(check.backup),
+        overflow: overflowText(findLegacyOverflows(raw)),
+      });
       setStep('mode');
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
-  async function doImport(mode: 'merge' | 'replace', payload: unknown) {
+  async function doImport(
+    mode: 'merge' | 'replace',
+    file: Picked,
+    statusText?: string,
+  ) {
     setStep('none');
-    setBusy(true);
+    setRunning('import');
+    setStatus(
+      statusText ??
+        (mode === 'merge' ? BACKUP_STATUS.merging : BACKUP_STATUS.replacing),
+    );
     try {
-      const r = await importer.mutateAsync({ mode, data: payload });
+      const r = await importer.mutateAsync({ mode, data: file.data });
+      setPicked(null);
       snackbar.show({
-        message: `Imported ${r.imported.topics} topics (${r.skipped.topics} skipped)`,
+        message: importResultMessage(r, mode),
+        durationMs: RESULT_MS,
       });
     } catch (e) {
-      snackbar.show({
-        message:
-          e instanceof ApiError
-            ? userMessage(e)
-            : "Couldn't read the backup file",
-      });
+      if (isSessionEndedError(e)) return;
+      // Keep the chosen file: Retry sends it again with the same choice,
+      // without the picker or the prompts.
+      if (canRetry(e)) {
+        snackbar.show({
+          message: importErrorMessage(e),
+          actionLabel: 'Retry',
+          onAction: () => {
+            doImport(mode, file);
+          },
+          durationMs: RETRY_MS,
+        });
+      } else {
+        setPicked(null);
+        snackbar.show({
+          message: importErrorMessage(e),
+          durationMs: RESULT_MS,
+        });
+      }
     } finally {
-      setBusy(false);
-      dataRef.current = null;
+      setRunning(null);
+      setStatus(null);
     }
   }
 
-  async function exportThenReplace() {
+  async function exportThenReplace(file: Picked) {
     setStep('none');
-    setBusy(true);
-    let ok = false;
-    try {
-      ok = await exportFlow();
-    } finally {
-      setBusy(false);
+    setRunning('export');
+    setStatus(BACKUP_STATUS.exporting);
+    const out = await exportToFile();
+    if (out.status === 'saved') {
+      // One message at the end of the whole flow: the import result.
+      await doImport('replace', file, BACKUP_STATUS.savedThenReplacing);
+      return;
     }
-    if (ok) await doImport('replace', dataRef.current);
-    else dataRef.current = null;
+    setRunning(null);
+    setStatus(null);
+    if (out.status === 'cancelled') {
+      // Back to the question, so the user can choose again.
+      setStep('exportFirst');
+      return;
+    }
+    snackbar.show({
+      message: `${out.message} — nothing was replaced`,
+      actionLabel: 'Retry',
+      onAction: () => {
+        exportThenReplace(file);
+      },
+      durationMs: RETRY_MS,
+    });
   }
 
   const cancel = () => {
     setStep('none');
-    dataRef.current = null;
+    setPicked(null);
   };
+
+  const summaryLine = picked ? summaryText(picked.summary) : null;
 
   return (
     <View style={{ gap: spacing.sm }}>
@@ -127,23 +195,36 @@ export function BackupSection() {
         title="Export backup"
         variant="secondary"
         onPress={runExport}
-        disabled={busy}
+        loading={running === 'export'}
+        disabled={running !== null}
       />
       <Button
         title="Import backup"
         variant="secondary"
         onPress={startImport}
-        disabled={busy}
+        loading={running === 'import'}
+        disabled={running !== null}
       />
+      {status ? (
+        <Text
+          testID="backup-status"
+          accessibilityLiveRegion="polite"
+          style={{ color: colors.muted }}
+        >
+          {status}
+        </Text>
+      ) : null}
       <Dialog
-        visible={step === 'mode'}
+        visible={step === 'mode' && picked !== null}
         title="Import backup"
         onRequestClose={cancel}
         actions={
           <>
             <Button
               title="Merge (recommended)"
-              onPress={() => doImport('merge', dataRef.current)}
+              onPress={() => {
+                if (picked) doImport('merge', picked);
+              }}
             />
             <Button
               title="Replace everything"
@@ -154,6 +235,36 @@ export function BackupSection() {
           </>
         }
       >
+        {summaryLine ? (
+          <Text
+            testID="backup-summary"
+            style={{
+              color: colors.text,
+              fontWeight: '700',
+              marginBottom: spacing.sm,
+            }}
+          >
+            {summaryLine}
+          </Text>
+        ) : null}
+        {picked?.overflow ? (
+          <View
+            testID="backup-overflow"
+            style={{ marginBottom: spacing.sm, gap: spacing.xs }}
+          >
+            <Text style={{ color: colors.text }}>{picked.overflow.text}</Text>
+            {picked.overflow.names.map((name, i) => (
+              <Text key={`${i}-${name}`} style={{ color: colors.muted }}>
+                {`• ${name}`}
+              </Text>
+            ))}
+            {picked.overflow.more > 0 ? (
+              <Text style={{ color: colors.muted }}>
+                {`and ${picked.overflow.more} more`}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
         <Text style={{ color: colors.text, marginBottom: spacing.sm }}>
           Merge adds the topics, exams, subjects and mock tests from the backup
           to what you have. Your settings stay as they are.
@@ -164,21 +275,39 @@ export function BackupSection() {
         </Text>
       </Dialog>
       <Dialog
-        visible={step === 'exportFirst'}
+        visible={step === 'exportFirst' && picked !== null}
         title="Export a backup first?"
         onRequestClose={cancel}
         actions={
           <>
-            <Button title="Export first" onPress={exportThenReplace} />
+            <Button
+              title="Export first"
+              onPress={() => {
+                if (picked) exportThenReplace(picked);
+              }}
+            />
             <Button
               title="Continue without export"
               variant="danger"
-              onPress={() => doImport('replace', dataRef.current)}
+              onPress={() => {
+                if (picked) doImport('replace', picked);
+              }}
             />
             <Button title="Cancel" variant="text" onPress={cancel} />
           </>
         }
       >
+        {summaryLine ? (
+          <Text
+            style={{
+              color: colors.text,
+              fontWeight: '700',
+              marginBottom: spacing.sm,
+            }}
+          >
+            {summaryLine}
+          </Text>
+        ) : null}
         <Text style={{ color: colors.text }}>
           Replacing removes your current topics. A backup of them lets you undo
           this.

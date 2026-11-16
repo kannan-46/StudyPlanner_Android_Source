@@ -33,10 +33,20 @@ export type UpdateCheck = {
   close: () => void;
   /** Opens the download link; resolves false when it could not be opened. */
   download: () => Promise<boolean>;
-  /** Checks again now (Settings). */
-  recheck: () => void;
+  /**
+   * Checks again now (Settings) and resolves with the outcome: a newer
+   * release, the latest already installed, or no answer (offline, server
+   * error). Never rejects.
+   */
+  recheck: () => Promise<RecheckOutcome>;
   checking: boolean;
+  /** The last check failed (the shown answer, if any, is from before). */
+  checkFailed: boolean;
+  /** When the server last answered (ms since epoch); 0 before any answer. */
+  checkedAt: number;
 };
+
+export type RecheckOutcome = 'update' | 'latest' | 'failed';
 
 export function useUpdateCheck(): UpdateCheck {
   const { appVersion } = useApi();
@@ -44,7 +54,7 @@ export function useUpdateCheck(): UpdateCheck {
   const installed = useMemo(getInstalledVersion, []);
 
   // Any failure (offline, 404 from an older API, a bad body) simply means no
-  // prompt: no retries, no error UI.
+  // prompt: no retries. Only a check the user starts (recheck) reports it.
   const versionQ = useQuery({
     queryKey: queryKeys.appVersion,
     queryFn: () => appVersion.latest(),
@@ -96,9 +106,18 @@ export function useUpdateCheck(): UpdateCheck {
   }, [url]);
 
   const { refetch } = versionQ;
-  const recheck = useCallback(() => {
-    refetch().catch(() => undefined);
-  }, [refetch]);
+  const installedCode = installed.code;
+  const recheck = useCallback(async (): Promise<RecheckOutcome> => {
+    try {
+      const r = await refetch();
+      if (r.isError || !r.data) return 'failed';
+      return installedCode !== null && r.data.latestVersionCode > installedCode
+        ? 'update'
+        : 'latest';
+    } catch {
+      return 'failed';
+    }
+  }, [refetch, installedCode]);
 
   return {
     installed,
@@ -110,5 +129,7 @@ export function useUpdateCheck(): UpdateCheck {
     download,
     recheck,
     checking: versionQ.isFetching,
+    checkFailed: versionQ.isError,
+    checkedAt,
   };
 }
