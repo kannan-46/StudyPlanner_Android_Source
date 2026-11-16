@@ -16,7 +16,7 @@ import { TopicDetailScreen } from '../features/topics/TopicDetailScreen';
 import { ReminderHealthScreen } from '../features/settings/ReminderHealthScreen';
 import { ManageExamsSubjectsScreen } from '../features/settings/ManageExamsSubjectsScreen';
 import { MockTestFormScreen } from '../features/mocktests/MockTestFormScreen';
-import { UpdateBanner } from '../features/appUpdate/UpdateBanner';
+import { UpdateDialog } from '../features/appUpdate/UpdateDialog';
 import { useUpdateCheck } from '../features/appUpdate/useUpdateCheck';
 import { Screen } from '../shared/ui/Screen';
 import { StackHeader, UnderHeaderContext } from '../shared/ui/StackHeader';
@@ -142,26 +142,23 @@ export function RootNavigator() {
   // The update prompt belongs to the main app, not sign-in or setup.
   const inMainApp =
     state.status === 'signedIn' && state.user.onboardingCompletedAt !== null;
-  const showUpdate = inMainApp && update.showBanner;
   return (
     <View style={styles.flex}>
-      {online && !showUpdate ? null : (
+      {online ? null : (
         <View
           style={{
             backgroundColor: colors.background,
             paddingTop: insets.top,
             paddingHorizontal: spacing.sm,
-            paddingBottom: showUpdate ? spacing.xs : 0,
-            gap: spacing.xs,
           }}
         >
-          {online ? null : <Banner tone="warning" text={OFFLINE_TEXT} />}
-          {showUpdate ? <UpdateBanner check={update} /> : null}
+          <Banner tone="warning" text={OFFLINE_TEXT} />
         </View>
       )}
       <View style={styles.flex}>
         <RootScreens />
       </View>
+      {inMainApp ? <UpdateDialog check={update} /> : null}
     </View>
   );
 }

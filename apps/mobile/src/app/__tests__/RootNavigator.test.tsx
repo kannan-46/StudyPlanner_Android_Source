@@ -173,48 +173,59 @@ const answerVersion = (body: unknown) =>
     path === '/v1/app/version' ? Promise.resolve(body) : new Promise(() => {}),
   );
 
-it('shows the update banner in the main app, below the offline banner', async () => {
+/** The nearest Modal around an element, or null when it is not in one. */
+function modalAround(el: { type: unknown; parent: unknown } | null) {
+  let node = el as { type: unknown; parent: unknown } | null;
+  while (node && node.type !== 'Modal') {
+    node = node.parent as { type: unknown; parent: unknown } | null;
+  }
+  return node;
+}
+
+it('shows the update dialog in a centred modal, not at the top, when offline', async () => {
   answerVersion(newerRelease);
   mockedNetInfo.mockImplementation((cb: (s: unknown) => void) => {
     cb({ isConnected: false, isInternetReachable: false });
     return jest.fn();
   });
   await setup();
-  expect(await screen.findByText('Version 4.2.0 is available')).toBeTruthy();
+  const dialog = await screen.findByTestId('update-dialog');
+  expect(screen.getByText('Update available')).toBeTruthy();
+  expect(screen.getByText('Version 4.2.0 is ready to install.')).toBeTruthy();
+  expect(modalAround(dialog)).toBeTruthy();
+  // The offline banner stays at the top on its own, outside the dialog.
   const offline = screen.getByText(OFFLINE_TEXT);
-  const banner = screen.getByTestId('update-banner');
-  // Both share the top area, offline first; the tabs (Home) stay usable.
-  const top = banner.parent!;
-  const children = top.children.filter(c => typeof c !== 'string');
+  expect(modalAround(offline)).toBeNull();
+  expect(screen.queryByTestId('update-banner')).toBeNull();
   expect(screen.getAllByText('Home').length).toBeGreaterThan(0);
-  expect(offline).toBeTruthy();
-  expect(children.length).toBe(2);
-  expect(children[1]).toBe(banner);
 });
 
-it('shows the update banner when online too', async () => {
+it('shows the update dialog when online too, at 320 dp', async () => {
+  mockDims(320);
   answerVersion(newerRelease);
   await setup();
-  expect(await screen.findByTestId('update-banner')).toBeTruthy();
+  expect(await screen.findByTestId('update-dialog')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Later' })).toBeTruthy();
   expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
 });
 
-it('does not show the update banner on sign-in', async () => {
+it('does not show the update dialog on sign-in', async () => {
   answerVersion(newerRelease);
   setState({ status: 'signedOut' });
   await setup();
   await screen.findByText('Continue with Google');
   await act(() => new Promise<void>(r => setTimeout(r, 20)));
-  expect(screen.queryByTestId('update-banner')).toBeNull();
+  expect(screen.queryByTestId('update-dialog')).toBeNull();
 });
 
-it('does not show the update banner during setup', async () => {
+it('does not show the update dialog during setup', async () => {
   answerVersion(newerRelease);
   setState({ status: 'signedIn', user: userWith(null) });
   await setup();
   await screen.findByText('Step 1 of 4');
   await act(() => new Promise<void>(r => setTimeout(r, 20)));
-  expect(screen.queryByTestId('update-banner')).toBeNull();
+  expect(screen.queryByTestId('update-dialog')).toBeNull();
 });
 
 it('renders MainTabs at 900 dp', async () => {

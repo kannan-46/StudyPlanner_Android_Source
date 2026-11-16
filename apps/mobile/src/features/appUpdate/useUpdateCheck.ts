@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Linking } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AppVersionView } from '@planner/shared';
@@ -22,10 +22,15 @@ export type UpdateCheck = {
   latest: AppVersionView | null;
   /** The server has a higher versionCode than the installed app. */
   updateAvailable: boolean;
-  /** updateAvailable, and the user has not tapped Later for this version. */
-  showBanner: boolean;
-  /** Hides the banner until a newer version than this one is released. */
+  /**
+   * updateAvailable, the user has not tapped Later for this version, and the
+   * prompt has not been closed since the last answer from the server.
+   */
+  showPrompt: boolean;
+  /** Later: hides the prompt until a newer version than this one is released. */
   dismiss: () => Promise<void>;
+  /** Closes the prompt until the next check (next start or foreground check). */
+  close: () => void;
   /** Opens the download link; resolves false when it could not be opened. */
   download: () => Promise<boolean>;
   /** Checks again now (Settings). */
@@ -60,10 +65,17 @@ export function useUpdateCheck(): UpdateCheck {
     staleTime: Infinity,
     retry: false,
   });
-  const showBanner =
+  // When the prompt was closed (Download), as the server answer's timestamp:
+  // a later answer (next start or foreground check) shows it again.
+  const checkedAt = versionQ.dataUpdatedAt;
+  const [closedAt, setClosedAt] = useState<number | null>(null);
+  const showPrompt =
     updateAvailable &&
     dismissedQ.isSuccess &&
-    (dismissedQ.data ?? 0) < latest.latestVersionCode;
+    (dismissedQ.data ?? 0) < latest.latestVersionCode &&
+    (closedAt === null || checkedAt > closedAt);
+
+  const close = useCallback(() => setClosedAt(checkedAt), [checkedAt]);
 
   const latestCode = latest?.latestVersionCode ?? null;
   const dismiss = useCallback(async () => {
@@ -92,8 +104,9 @@ export function useUpdateCheck(): UpdateCheck {
     installed,
     latest,
     updateAvailable,
-    showBanner,
+    showPrompt,
     dismiss,
+    close,
     download,
     recheck,
     checking: versionQ.isFetching,

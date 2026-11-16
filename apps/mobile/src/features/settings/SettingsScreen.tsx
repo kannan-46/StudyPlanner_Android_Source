@@ -28,7 +28,7 @@ import { useDeleteAccount, useMe, useUpdateMe } from '../me/hooks';
 import {
   DOWNLOAD_FAILED_TEXT,
   updateAvailableText,
-} from '../appUpdate/UpdateBanner';
+} from '../appUpdate/UpdateDialog';
 import { useUpdateCheck } from '../appUpdate/useUpdateCheck';
 import { BackupSection } from './BackupSection';
 

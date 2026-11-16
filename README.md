@@ -32,20 +32,32 @@ built with `./gradlew assembleDebug`. On-device verification:
 The app is shared as an APK on GitHub Releases. On start (and when it comes
 back to the foreground, at most every 6 hours) it calls the public
 `GET /v1/app/version`. When the server's `latestVersionCode` is higher than the
-installed `versionCode`, the app shows an "update available" banner with a
-**Download** button, and Settings shows the update.
+installed `versionCode`, the app shows an "Update available" dialog with
+**Download** and **Later** buttons, and Settings shows the update.
+**Download** opens `APK_DOWNLOAD_URL`, which by default downloads the asset
+named `StudyPlanner.apk` from the latest GitHub Release:
+`https://github.com/kannan-46/StudyPlanner_Android_Source/releases/latest/download/StudyPlanner.apk`.
 
-1. Raise `versionCode` and `versionName` in `apps/mobile/android/app/build.gradle`
-   and build a release APK signed with the same key as before.
-2. Attach the APK to a new GitHub Release.
-3. In Vercel, set the env vars below and redeploy (no code change needed).
+1. Raise `versionCode` and `versionName` in
+   `apps/mobile/android/app/build.gradle` (for example `6` and `"4.2.0"`).
+2. Build a release APK signed with the same key as before (see
+   [Release build](apps/mobile/README.md#release)): from `apps/mobile/android`,
+   run `./gradlew assembleRelease`.
+3. On GitHub, create a new release with the tag `vX.Y.Z` (for example
+   `v4.2.0`) and upload
+   `apps/mobile/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk`
+   renamed to exactly `StudyPlanner.apk`. Publish it as a normal release (not a
+   draft or pre-release) so it becomes the "latest" one.
+4. In Vercel, set `LATEST_VERSION_CODE` and `LATEST_VERSION_NAME` (and
+   optionally `UPDATE_NOTES`) to the new release, then redeploy (no code change
+   needed).
 
-| Variable              | Default                                        | Meaning                                    |
-| --------------------- | ---------------------------------------------- | ------------------------------------------ |
-| `LATEST_VERSION_CODE` | `5`                                            | Newest `versionCode` (integer)             |
-| `LATEST_VERSION_NAME` | `4.1.0`                                        | Shown to users, e.g. "Version 4.1.0"       |
-| `APK_DOWNLOAD_URL`    | the repository's GitHub Releases `latest` page | http(s) link opened by **Download**        |
-| `UPDATE_NOTES`        | none                                           | Optional short text shown under the banner |
+| Variable              | Default                                    | Meaning                                 |
+| --------------------- | ------------------------------------------ | --------------------------------------- |
+| `LATEST_VERSION_CODE` | `5`                                        | Newest `versionCode` (integer)          |
+| `LATEST_VERSION_NAME` | `4.1.0`                                    | Shown to users, e.g. "Version 4.1.0"    |
+| `APK_DOWNLOAD_URL`    | `StudyPlanner.apk` from the latest release | http(s) link opened by **Download**     |
+| `UPDATE_NOTES`        | none                                       | Optional short text shown in the dialog |
 
 All four are optional; a blank value uses the default.
 

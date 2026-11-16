@@ -17,7 +17,7 @@ describe('GET /v1/app/version', () => {
       latestVersionCode: 5,
       latestVersionName: '4.1.0',
       downloadUrl:
-        'https://github.com/kannan-46/StudyPlanner_Android_Source/releases/latest',
+        'https://github.com/kannan-46/StudyPlanner_Android_Source/releases/latest/download/StudyPlanner.apk',
       notes: null,
     });
     expect(res.headers['cache-control']).toBe('no-store');
