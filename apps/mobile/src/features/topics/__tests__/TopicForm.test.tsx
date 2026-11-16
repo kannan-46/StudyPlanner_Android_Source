@@ -77,19 +77,19 @@ describe('TopicForm', () => {
     expect(await screen.findByText('Enter a topic name')).toBeOnTheScreen();
     expect(screen.getByText('Choose a subject')).toBeOnTheScreen();
     expect(
-      screen.getByText('Fix the fields marked in red above.'),
+      screen.getByText('Please check: Topic name, Subject'),
     ).toBeOnTheScreen();
 
     await fireEvent.changeText(screen.getByLabelText(/^Topic name/), 'Hernia');
     expect(screen.queryByText('Enter a topic name')).toBeNull();
     expect(screen.getByText('Choose a subject')).toBeOnTheScreen();
     expect(
-      screen.getByText('Fix the field marked in red above.'),
+      screen.getByText('Please check: Subject'),
     ).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByText('+ New subject'));
     expect(screen.queryByText('Choose a subject')).toBeNull();
-    expect(screen.queryByText(/marked in red/)).toBeNull();
+    expect(screen.queryByText(/^Please check/)).toBeNull();
 
     await fireEvent.press(screen.getByText('Add topic'));
     expect(
@@ -171,7 +171,7 @@ describe('TopicForm', () => {
     );
     await fillBasics();
     await fireEvent.press(screen.getByText(/Advanced/));
-    const field = () => screen.getByLabelText(/^Custom intervals \(days\)/);
+    const field = () => screen.getByLabelText(/^Custom revision days \(after studying\)/);
     expect(field().props.keyboardType).toBe('numeric');
 
     await fireEvent.changeText(field(), '0, 7, 15');
@@ -249,11 +249,11 @@ describe('TopicForm', () => {
     expect(screen.getByLabelText('Loading subjects')).toBeOnTheScreen();
     await act(async () => failSubjects());
     expect(
-      await screen.findByText("Couldn't load your subjects."),
+      await screen.findByText("Couldn't load your subjects"),
     ).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Retry'));
     expect(await screen.findByText('Anatomy')).toBeOnTheScreen();
-    expect(screen.queryByText("Couldn't load your subjects.")).toBeNull();
+    expect(screen.queryByText("Couldn't load your subjects")).toBeNull();
   });
 
   it('exposes submit() and hasDraft() through a ref', async () => {
@@ -375,7 +375,7 @@ describe('TopicForm', () => {
     );
     await fireEvent.press(await screen.findByText(/Advanced/));
     await fireEvent.changeText(
-      screen.getByLabelText(/^Custom intervals \(days\)/),
+      screen.getByLabelText(/^Custom revision days \(after studying\)/),
       '',
     );
     await fireEvent.press(screen.getByText('Save'));
