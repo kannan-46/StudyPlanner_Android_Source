@@ -1,5 +1,9 @@
 import React from 'react';
-import { StyleSheet, useWindowDimensions } from 'react-native';
+import {
+  AccessibilityInfo,
+  StyleSheet,
+  useWindowDimensions,
+} from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {
@@ -163,6 +167,15 @@ it('the offline banner on sign-in asks to connect to sign in', async () => {
   await setup();
   expect(screen.getByText(OFFLINE_SIGN_IN_TEXT)).toBeTruthy();
   expect(screen.queryByText(OFFLINE_TEXT)).toBeNull();
+});
+
+it('reads the offline banner out loud when it appears', async () => {
+  const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  setState({ status: 'signedOut' });
+  goOffline();
+  await setup();
+  expect(spy).toHaveBeenCalledWith(OFFLINE_SIGN_IN_TEXT);
+  spy.mockRestore();
 });
 
 it('the offline banner while starting asks to connect to continue', async () => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { onlineManager } from '@tanstack/react-query';
+import { useAnnounce } from '../../shared/ui/announce';
 import { Banner } from '../../shared/ui/Banner';
 import { Button } from '../../shared/ui/Button';
 import { Screen } from '../../shared/ui/Screen';
@@ -45,6 +46,8 @@ export function SignInScreen() {
   const { isLandscape, height } = useResponsive();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Role 'alert' is silent on Android, so say the error out loud.
+  useAnnounce(error);
 
   const onPress = async () => {
     setError(null);

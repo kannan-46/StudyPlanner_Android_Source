@@ -4,6 +4,8 @@ import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import App from '../../../App';
 import { darkColors } from '../../shared/ui/theme';
+import * as queryClientModule from '../../shared/api/queryClient';
+import type { QueryClient } from '@tanstack/react-query';
 
 // The real provider waits for native inset measurements before drawing.
 jest.mock(
@@ -11,8 +13,28 @@ jest.mock(
   () => jest.requireActual('react-native-safe-area-context/jest/mock').default,
 );
 
+// The real app talks to the network and keeps its own query client; stub the
+// network and clear each client so no request or cache timer outlives a test.
+const clients: QueryClient[] = [];
+const realFetch = globalThis.fetch;
+let createSpy: jest.SpyInstance | undefined;
 beforeEach(async () => {
   await AsyncStorage.clear();
+  globalThis.fetch = jest.fn(() =>
+    Promise.reject(new TypeError('Network request failed')),
+  ) as typeof fetch;
+  const create = queryClientModule.createQueryClient;
+  createSpy = jest.spyOn(queryClientModule, 'createQueryClient');
+  createSpy.mockImplementation(() => {
+    const client = create();
+    clients.push(client);
+    return client;
+  });
+});
+afterEach(() => {
+  createSpy?.mockRestore();
+  globalThis.fetch = realFetch;
+  clients.splice(0).forEach(c => c.clear());
 });
 
 it('renders without crashing', async () => {

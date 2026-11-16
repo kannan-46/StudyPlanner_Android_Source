@@ -256,8 +256,8 @@ apps/mobile/src/
 - `ReminderModule.kt` (TurboModule-compatible): `syncSnapshot(json)`, `setReminderTime(h, m, enabled)`, `getStatus()` (notifications enabled, exact-alarm allowed, ignoring battery optimisations, next fire time), `openSettings(kind)`, `sendTestNotification()`, `clearAll()`.
 - `ReminderStore.kt`: a single synchronized JSON blob in SharedPreferences, `{reminderTime, enabled, lastShownDate, items:[{topicName, dueOn}]}`. Every write uses `commit()` under one lock.
 - `ReminderScheduler.kt`: computes the next local wall-clock fire time (today if it's still ahead, else tomorrow).
-  - Uses `setExactAndAllowWhileIdle` when `canScheduleExactAlarms()`, otherwise `setWindow` with a 10-minute window.
-  - One fixed request code and an explicit-component PendingIntent with `FLAG_IMMUTABLE`.
+  - Uses `setExactAndAllowWhileIdle` when `canScheduleExactAlarms()`, otherwise a pair of alarms for the same time: `setWindow` with a 10-minute window (on time while the phone is awake) plus `setAndAllowWhileIdle` (still fires in Doze); the receiver shows at most one summary a day.
+  - Fixed request codes (one per alarm of the pair) and explicit-component PendingIntents with `FLAG_IMMUTABLE`.
 - `ReminderReceiver.kt`: on fire, reads the snapshot and counts due and overdue items against *today's local date*. It posts the notification if any are due, stores `lastShownDate`, and re-arms for tomorrow.
 - `SystemEventsReceiver.kt`: listens for `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`, `TIMEZONE_CHANGED`, `TIME_SET`, and `ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`. It re-arms the alarm. If today's reminder time has already passed and `lastShownDate != today`, it shows today's reminder now, once.
 - A notification channel `revision_reminders` (high importance), created at app start.

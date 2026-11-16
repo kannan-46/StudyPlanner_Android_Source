@@ -189,7 +189,7 @@ export function RootNavigator() {
             paddingBottom: spacing.xs,
           }}
         >
-          <Banner tone="warning" text={offlineText(state.status)} />
+          <Banner tone="warning" text={offlineText(state.status)} announce />
         </View>
       )}
       <View style={styles.flex}>

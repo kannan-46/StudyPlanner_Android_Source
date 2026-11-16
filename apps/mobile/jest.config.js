@@ -2,6 +2,9 @@ module.exports = {
   preset: '@react-native/jest-preset',
   moduleNameMapper: {
     '^@planner/shared$': '<rootDir>/../../packages/shared/src',
+    // Babel helpers emitted while compiling packages/shared resolve from the
+    // app's node_modules, as Metro does through `nodeModulesPaths`.
+    '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
   },
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-navigation|react-native-.*)/)',

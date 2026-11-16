@@ -236,7 +236,7 @@ export function snoozeRevision(input: ScheduleInput, revisionId: string, today: 
 - `reconcileSchedule`:
   - New intervals with fewer entries than the number of done revisions → `VALIDATION_FAILED`.
   - Keep revisions with a matching `step` (their `id` and `doneOn`). Create new ones for added steps and drop extra pending steps.
-  - Clear `dueOverride` on all pending revisions, then rebuild.
+  - Rebuild, keeping a pending revision's `dueOverride` only while it is still later than the recomputed date (steps are restored in order, rebuilding after each, so later steps count from a kept date); otherwise clear it.
 - An unknown `revisionId` → `REVISION_NOT_FOUND`. All functions are pure and return new arrays.
 
 - [ ] **Step 1: Write the failing tests** with a counter-based `makeId`:

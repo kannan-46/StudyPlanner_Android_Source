@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Text, useWindowDimensions } from 'react-native';
 import {
   render,
   screen,
@@ -221,6 +221,7 @@ it('a request the server refuses (4xx) is not tried again', async () => {
 });
 
 it('the start-up error says when the phone is offline and retries on reconnect', async () => {
+  const announceSpy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
   jest.useFakeTimers();
   let report: (s: unknown) => void = () => {};
   (NetInfo.addEventListener as jest.Mock).mockImplementation(
@@ -237,6 +238,7 @@ it('the start-up error says when the phone is offline and retries on reconnect',
     await jest.advanceTimersByTimeAsync(3000);
   });
   expect(screen.getByText(STARTUP_OFFLINE_TEXT)).toBeTruthy();
+  expect(announceSpy).toHaveBeenCalledWith(STARTUP_OFFLINE_TEXT);
   http.get.mockResolvedValue(user);
   await act(async () => {
     report({ isConnected: true, isInternetReachable: true });
@@ -245,6 +247,7 @@ it('the start-up error says when the phone is offline and retries on reconnect',
     await jest.advanceTimersByTimeAsync(0);
   });
   expect(probe()).toBe('in:Asha');
+  announceSpy.mockRestore();
 });
 
 function SignInHarness() {
@@ -309,6 +312,18 @@ it('signIn E_NO_ACCOUNT and E_CONFIG show inline messages', async () => {
   expect(
     await screen.findByText('Google sign-in is not configured'),
   ).toBeTruthy();
+});
+
+it('reads a sign-in error out loud', async () => {
+  const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  (signInWithGoogle as jest.Mock).mockRejectedValueOnce(
+    new GoogleAuthError('E_NO_ACCOUNT'),
+  );
+  await setup(<SignInScreen />);
+  await fireEvent.press(await screen.findByText('Continue with Google'));
+  await screen.findByText('Add a Google account to this phone first');
+  expect(spy).toHaveBeenCalledWith('Add a Google account to this phone first');
+  spy.mockRestore();
 });
 
 async function signedInSetup() {

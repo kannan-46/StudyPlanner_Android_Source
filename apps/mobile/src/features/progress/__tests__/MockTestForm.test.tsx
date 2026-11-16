@@ -16,9 +16,9 @@ describe('MockTestForm', () => {
   it('rejects score above max without calling the API', async () => {
     const http = makeHttp();
     await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText(/^Title/), 'Mock 1');
     await fireEvent.changeText(screen.getByLabelText('Score'), '110');
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '100');
     await fireEvent.press(screen.getByText('Save'));
     expect(
       await screen.findByText('Score cannot exceed max score'),
@@ -30,19 +30,19 @@ describe('MockTestForm', () => {
     const http = makeHttp();
     await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
     await fireEvent.changeText(screen.getByLabelText('Score'), '-1');
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '0');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '0');
     await fireEvent.press(screen.getByText('Save'));
     expect(await screen.findByText('Enter a title')).toBeOnTheScreen();
     expect(screen.getByText("Score can't be negative")).toBeOnTheScreen();
     expect(screen.getByText('Max score must be more than 0')).toBeOnTheScreen();
     expect(screen.queryByText(/Too small|expected/)).toBeNull();
 
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText(/^Title/), 'Mock 1');
     expect(screen.queryByText('Enter a title')).toBeNull();
     expect(screen.getByText("Score can't be negative")).toBeOnTheScreen();
 
     // Score and max are checked together, so editing either clears both.
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '100');
     expect(screen.queryByText("Score can't be negative")).toBeNull();
     expect(screen.queryByText('Max score must be more than 0')).toBeNull();
     expect(http.post).not.toHaveBeenCalled();
@@ -50,14 +50,14 @@ describe('MockTestForm', () => {
 
   it('clears the score-above-max error when max score changes', async () => {
     await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, makeHttp());
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText(/^Title/), 'Mock 1');
     await fireEvent.changeText(screen.getByLabelText('Score'), '120');
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '100');
     await fireEvent.press(screen.getByText('Save'));
     expect(
       await screen.findByText('Score cannot exceed max score'),
     ).toBeOnTheScreen();
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '150');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '150');
     expect(screen.queryByText('Score cannot exceed max score')).toBeNull();
   });
 
@@ -67,9 +67,9 @@ describe('MockTestForm', () => {
       const http = makeHttp();
       http.post.mockRejectedValue(new ApiError('NETWORK', 0));
       await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
-      await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+      await fireEvent.changeText(screen.getByLabelText(/^Title/), 'Mock 1');
       await fireEvent.changeText(screen.getByLabelText('Score'), '80');
-      await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+      await fireEvent.changeText(screen.getByLabelText(/^Max score/), '100');
       await fireEvent.press(screen.getByText('Save'));
       expect(
         await screen.findByText("Can't reach the server — try again"),
@@ -88,15 +88,15 @@ describe('MockTestForm', () => {
       .mockResolvedValueOnce(saved);
     const onSaved = jest.fn();
     await renderWithProviders(<MockTestForm onSaved={onSaved} />, http);
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText(/^Title/), 'Mock 1');
     await fireEvent.changeText(screen.getByLabelText('Score'), '80');
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '100');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '100');
     await fireEvent.press(await screen.findByText('MS General Surgery'));
     await fireEvent.press(screen.getByText('Save'));
     expect(
       await screen.findByText("Can't reach the server — try again"),
     ).toBeOnTheScreen();
-    expect(screen.getByLabelText('Title').props.value).toBe('Mock 1');
+    expect(screen.getByLabelText(/^Title/).props.value).toBe('Mock 1');
     expect(screen.getByLabelText('Score').props.value).toBe('80');
     await fireEvent.press(screen.getByText('Retry'));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -130,9 +130,9 @@ describe('MockTestForm', () => {
       />,
       http,
     );
-    expect(screen.getByLabelText('Title').props.value).toBe('Mock A');
+    expect(screen.getByLabelText(/^Title/).props.value).toBe('Mock A');
     expect(screen.getByLabelText('Score').props.value).toBe('7');
-    expect(screen.getByLabelText('Max score').props.value).toBe('100');
+    expect(screen.getByLabelText(/^Max score/).props.value).toBe('100');
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
     await fireEvent.changeText(screen.getByLabelText('Score'), '70');
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
@@ -152,9 +152,9 @@ describe('MockTestForm', () => {
     const http = makeHttp();
     http.post.mockResolvedValue({ id: ID(5) });
     await renderWithProviders(<MockTestForm onSaved={jest.fn()} />, http);
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Mock 1');
+    await fireEvent.changeText(screen.getByLabelText(/^Title/), 'Mock 1');
     await fireEvent.changeText(screen.getByLabelText('Score'), '72,5');
-    await fireEvent.changeText(screen.getByLabelText('Max score'), '100,0');
+    await fireEvent.changeText(screen.getByLabelText(/^Max score/), '100,0');
     await fireEvent.press(await screen.findByText('MS General Surgery'));
     await fireEvent.press(screen.getByText('Save'));
     await waitFor(() => expect(http.post).toHaveBeenCalled());

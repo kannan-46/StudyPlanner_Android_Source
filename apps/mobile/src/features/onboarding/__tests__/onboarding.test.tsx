@@ -308,7 +308,7 @@ describe('TopicsStep', () => {
     expect(screen.getByLabelText('Topic name').props.value).toBe('');
     expect(
       screen.getByRole('radio', { name: 'Anatomy' }).props.accessibilityState
-        .selected,
+        .checked,
     ).toBe(true);
     await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
     await waitFor(() =>

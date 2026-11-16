@@ -16,7 +16,7 @@ afterEach(cleanupClients);
 
 async function fillBasics() {
   await fireEvent.changeText(
-    await screen.findByLabelText('Topic name'),
+    await screen.findByLabelText(/^Topic name/),
     'Hernia',
   );
   await fireEvent.press(await screen.findByText('Anatomy'));
@@ -39,10 +39,10 @@ describe('TopicForm', () => {
     expect(
       await screen.findByText("Can't reach the server — try again"),
     ).toBeOnTheScreen();
-    expect(screen.getByLabelText('Topic name').props.value).toBe('Hernia');
+    expect(screen.getByLabelText(/^Topic name/).props.value).toBe('Hernia');
     expect(
       screen.getByRole('radio', { name: 'Anatomy' }).props.accessibilityState
-        .selected,
+        .checked,
     ).toBe(true);
     expect(onSaved).not.toHaveBeenCalled();
 
@@ -80,7 +80,7 @@ describe('TopicForm', () => {
       screen.getByText('Fix the fields marked in red above.'),
     ).toBeOnTheScreen();
 
-    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Hernia');
+    await fireEvent.changeText(screen.getByLabelText(/^Topic name/), 'Hernia');
     expect(screen.queryByText('Enter a topic name')).toBeNull();
     expect(screen.getByText('Choose a subject')).toBeOnTheScreen();
     expect(
@@ -96,7 +96,7 @@ describe('TopicForm', () => {
       await screen.findByText('Enter a name for the new subject'),
     ).toBeOnTheScreen();
     await fireEvent.changeText(
-      screen.getByLabelText('New subject name'),
+      screen.getByLabelText(/^New subject name/),
       'Surgery',
     );
     expect(screen.queryByText('Enter a name for the new subject')).toBeNull();
@@ -135,7 +135,7 @@ describe('TopicForm', () => {
     expect(
       await screen.findByText("Can't reach the server — try again"),
     ).toBeOnTheScreen();
-    await fireEvent.changeText(screen.getByLabelText('Topic name'), 'Hernias');
+    await fireEvent.changeText(screen.getByLabelText(/^Topic name/), 'Hernias');
     expect(screen.queryByText("Can't reach the server — try again")).toBeNull();
     expect(screen.queryByText('Retry')).toBeNull();
   });
@@ -149,7 +149,7 @@ describe('TopicForm', () => {
       makeHttp(),
     );
     await fireEvent.changeText(
-      await screen.findByLabelText('Topic name'),
+      await screen.findByLabelText(/^Topic name/),
       'Hernia',
     );
     await screen.findByText('Anatomy');
@@ -171,7 +171,7 @@ describe('TopicForm', () => {
     );
     await fillBasics();
     await fireEvent.press(screen.getByText(/Advanced/));
-    const field = () => screen.getByLabelText('Custom intervals (days)');
+    const field = () => screen.getByLabelText(/^Custom intervals \(days\)/);
     expect(field().props.keyboardType).toBe('numeric');
 
     await fireEvent.changeText(field(), '0, 7, 15');
@@ -304,12 +304,12 @@ describe('TopicForm', () => {
       http,
     );
     await fireEvent.changeText(
-      await screen.findByLabelText('Topic name'),
+      await screen.findByLabelText(/^Topic name/),
       'Hernia',
     );
     await fireEvent.press(await screen.findByText('+ New subject'));
     await fireEvent.changeText(
-      screen.getByLabelText('New subject name'),
+      screen.getByLabelText(/^New subject name/),
       'Surgery',
     );
     await fireEvent.press(screen.getByText('Add topic'));
@@ -334,12 +334,12 @@ describe('TopicForm', () => {
       http,
     );
     await fireEvent.changeText(
-      await screen.findByLabelText('Topic name'),
+      await screen.findByLabelText(/^Topic name/),
       'Hernia',
     );
     await fireEvent.press(await screen.findByText('+ New subject'));
     await fireEvent.changeText(
-      screen.getByLabelText('New subject name'),
+      screen.getByLabelText(/^New subject name/),
       'anatomy',
     );
     await fireEvent.press(screen.getByText('Add topic'));
@@ -375,7 +375,7 @@ describe('TopicForm', () => {
     );
     await fireEvent.press(await screen.findByText(/Advanced/));
     await fireEvent.changeText(
-      screen.getByLabelText('Custom intervals (days)'),
+      screen.getByLabelText(/^Custom intervals \(days\)/),
       '',
     );
     await fireEvent.press(screen.getByText('Save'));
@@ -390,7 +390,7 @@ describe('TopicForm', () => {
       <TopicForm mode="create" compact onSaved={jest.fn()} />,
       makeHttp(),
     );
-    await screen.findByLabelText('Topic name');
+    await screen.findByLabelText(/^Topic name/);
     expect(screen.queryByLabelText('Notes')).toBeNull();
     expect(screen.queryByText('Advanced')).toBeNull();
   });

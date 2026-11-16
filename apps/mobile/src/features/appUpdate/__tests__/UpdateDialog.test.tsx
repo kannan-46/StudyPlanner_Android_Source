@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  AccessibilityInfo,
   Linking,
   NativeModules,
   StyleSheet,
@@ -101,7 +102,7 @@ it('holds at 320 dp with a large font scale: full-width card, scrolling body', a
   );
   expect(card.width).toBe('100%');
   expect(card.maxWidth).toBe(480);
-  expect(card.maxHeight).toBe('90%');
+  expect(card.maxHeight).toBe('100%');
   // Long notes and both buttons sit inside the scroll view, so nothing clips.
   let scroll = body.parent;
   while (scroll && scroll.type !== 'RCTScrollView') scroll = scroll.parent;
@@ -287,6 +288,18 @@ it('says so in the dialog when the download link cannot be opened', async () => 
   );
   expect(await screen.findByText(DOWNLOAD_FAILED_TEXT)).toBeTruthy();
   expect(screen.getByTestId('update-dialog')).toBeTruthy();
+});
+
+it('reads the download failure out loud', async () => {
+  const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no browser'));
+  const http = httpWith(async () => release(6));
+  await renderWithProviders(<Harness />, http);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Download' }),
+  );
+  await screen.findByText(DOWNLOAD_FAILED_TEXT);
+  expect(spy).toHaveBeenCalledWith(DOWNLOAD_FAILED_TEXT);
 });
 
 it('checks at most every 6 hours, also when returning to the foreground', () => {

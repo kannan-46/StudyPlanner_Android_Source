@@ -25,6 +25,7 @@ import { clearFocusSession } from '../../shared/lib/focusSession';
 import { clearOnboardingStep } from '../../shared/lib/localPrefs';
 import { useAppForeground } from '../../shared/lib/useAppForeground';
 import { useOnline } from '../../shared/lib/useOnline';
+import { useAnnounce } from '../../shared/ui/announce';
 import { Button } from '../../shared/ui/Button';
 import { Screen } from '../../shared/ui/Screen';
 import { useTheme } from '../../shared/ui/ThemeProvider';
@@ -260,6 +261,8 @@ function StartupError({
     wasOnline.current = online;
   }, [online, onRetry]);
   useAppForeground(onRetry);
+  const message = online ? userMessage(error) : STARTUP_OFFLINE_TEXT;
+  useAnnounce(message);
   return (
     <Screen>
       <Text
@@ -272,7 +275,7 @@ function StartupError({
           marginBottom: spacing.lg,
         }}
       >
-        {online ? userMessage(error) : STARTUP_OFFLINE_TEXT}
+        {message}
       </Text>
       <Button title="Retry" onPress={onRetry} />
     </Screen>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
+import { useAnnounce } from '../../shared/ui/announce';
 import { Button } from '../../shared/ui/Button';
 import { Dialog } from '../../shared/ui/Dialog';
 import { useTheme } from '../../shared/ui/ThemeProvider';
@@ -28,6 +29,7 @@ export function UpdateDialog({ check }: { check: UpdateCheck }) {
   useEffect(() => {
     if (!showPrompt) setFailed(false);
   }, [showPrompt]);
+  useAnnounce(failed ? DOWNLOAD_FAILED_TEXT : null);
   if (!showPrompt || !latest) return null;
 
   function onLater() {
