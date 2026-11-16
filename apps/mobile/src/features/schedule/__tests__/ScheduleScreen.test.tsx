@@ -1,9 +1,10 @@
 import React from 'react';
 import { useWindowDimensions } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { addDays, localToday, type AgendaItem } from '@planner/shared';
 import { ScheduleScreen } from '../ScheduleScreen';
 import { ApiError } from '../../../shared/api/errors';
+import { formatDate } from '../../../shared/lib/format';
 import {
   ID,
   cleanupClients,
@@ -17,6 +18,17 @@ jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useFocusEffect: jest.fn(),
   useNavigation: () => ({ navigate: mockNavigate }),
+}));
+const mockScrollRefs: { current: unknown }[] = [];
+jest.mock('../../../shared/ui/ScrollToTopOnTabPress', () => ({
+  ScrollToTopOnTabPress: ({
+    scrollRef,
+  }: {
+    scrollRef: { current: unknown };
+  }) => {
+    mockScrollRefs.push(scrollRef);
+    return null;
+  },
 }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
@@ -76,7 +88,7 @@ describe('ScheduleScreen', () => {
     await renderWithProviders(<ScheduleScreen />, httpWith(items));
     expect(await screen.findByText('Overdue')).toBeOnTheScreen();
     expect(screen.getByText('Today')).toBeOnTheScreen();
-    expect(screen.getByText('Upcoming')).toBeOnTheScreen();
+    expect(screen.getByText('Upcoming (next 30 days)')).toBeOnTheScreen();
     expect(screen.getByText('Old topic')).toBeOnTheScreen();
     expect(screen.getByText('Hernia')).toBeOnTheScreen();
     expect(screen.getByText('Later topic')).toBeOnTheScreen();
@@ -89,9 +101,10 @@ describe('ScheduleScreen', () => {
   });
 
   it('shows the empty state', async () => {
-    await renderWithProviders(<ScheduleScreen />, httpWith([]));
+    const soon = topic({ nextDueOn: today });
+    await renderWithProviders(<ScheduleScreen />, httpWith([], [soon]));
     expect(
-      await screen.findByText('Nothing due — add topics or enjoy the break'),
+      await screen.findByText('Nothing due in the next 30 days'),
     ).toBeOnTheScreen();
   });
 
@@ -187,10 +200,8 @@ describe('ScheduleScreen', () => {
     expect(
       await screen.findByText('Nothing due for MS General Surgery'),
     ).toBeOnTheScreen();
-    expect(
-      screen.queryByText('Nothing due — add topics or enjoy the break'),
-    ).toBeNull();
-    await fireEvent.press(screen.getByText('Show all'));
+    expect(screen.queryByText('Nothing due in the next 30 days')).toBeNull();
+    await fireEvent.press(screen.getByText('Show all exams'));
     expect(await screen.findByText('Other')).toBeOnTheScreen();
   });
 
@@ -211,5 +222,161 @@ describe('ScheduleScreen', () => {
       await screen.findByText('Revision 2 of 2 · Overdue by 3 days'),
     ).toBeOnTheScreen();
     expect(screen.getByText('Revision 2 of 2 · Due today')).toBeOnTheScreen();
+  });
+});
+
+describe('ScheduleScreen (UX round 2)', () => {
+  const refreshList = async () => {
+    const list = screen.getByTestId('schedule-list');
+    await act(async () => {
+      await list.props.refreshControl.props.onRefresh();
+    });
+  };
+
+  it('always has the Schedule title, with section headings', async () => {
+    await renderWithProviders(<ScheduleScreen />, httpWith(items));
+    expect(
+      await screen.findByRole('header', { name: 'Schedule' }),
+    ).toBeOnTheScreen();
+    // The title shows while loading; the sections wait for the agenda.
+    expect(
+      await screen.findByRole('header', { name: 'Overdue' }),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('header', { name: 'Upcoming (next 30 days)' }),
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the title when there are no exams', async () => {
+    const http = httpWith(items);
+    const base = http.get.getMockImplementation() as (
+      p: string,
+      q?: unknown,
+    ) => Promise<unknown>;
+    http.get.mockImplementation(async (path: string, q?: unknown) =>
+      path === '/v1/exams' ? [] : base(path, q),
+    );
+    await renderWithProviders(<ScheduleScreen />, http);
+    expect(await screen.findByText('Hernia')).toBeOnTheScreen();
+    expect(screen.getByRole('header', { name: 'Schedule' })).toBeOnTheScreen();
+    expect(screen.queryByText('All exams')).toBeNull();
+  });
+
+  it('the exam filter scrolls sideways and starts with All exams', async () => {
+    await renderWithProviders(<ScheduleScreen />, httpWith(items));
+    expect(await screen.findByText('All exams')).toBeOnTheScreen();
+    expect(screen.getByTestId('chip-scroll-exam-filter')).toBeOnTheScreen();
+  });
+
+  it('names the next revision beyond the 30 days', async () => {
+    const later = addDays(today, 45);
+    const far = topic({ nextDueOn: later });
+    await renderWithProviders(<ScheduleScreen />, httpWith([], [far]));
+    expect(
+      await screen.findByText('Nothing due in the next 30 days'),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByText(`Next: Hernia on ${formatDate(later)}.`),
+    ).toBeOnTheScreen();
+  });
+
+  it('a user with no topics is offered Add your first topic', async () => {
+    await renderWithProviders(<ScheduleScreen />, httpWith([], []));
+    expect(await screen.findByText('No topics yet')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByText('Add your first topic'));
+    expect(mockNavigate).toHaveBeenCalledWith('TopicForm');
+  });
+
+  it('a user whose topics are all revised is told so', async () => {
+    const done = topic({ status: 'completed', nextDueOn: null });
+    await renderWithProviders(<ScheduleScreen />, httpWith([], [done]));
+    expect(
+      await screen.findByText('Every topic fully revised'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('No topics yet')).toBeNull();
+  });
+
+  it('a failed pull to refresh says so and keeps the list', async () => {
+    let fail = false;
+    const http = httpWith(items);
+    const base = http.get.getMockImplementation() as (
+      p: string,
+      q?: unknown,
+    ) => Promise<unknown>;
+    http.get.mockImplementation(async (path: string, q?: unknown) => {
+      if (fail && path === '/v1/agenda') {
+        throw new ApiError('SERVICE_UNAVAILABLE', 503);
+      }
+      return base(path, q);
+    });
+    await renderWithProviders(<ScheduleScreen />, http);
+    expect(await screen.findByText('Hernia')).toBeOnTheScreen();
+    fail = true;
+    await refreshList();
+    expect(await screen.findByText(/^Couldn't refresh/)).toBeOnTheScreen();
+    expect(screen.getByText('Retry')).toBeOnTheScreen();
+    expect(screen.getByText('Hernia')).toBeOnTheScreen();
+  });
+
+  it('an empty agenda waits for the topics before choosing a message', async () => {
+    const http = httpWith([], []);
+    const base = http.get.getMockImplementation() as (
+      p: string,
+      q?: unknown,
+    ) => Promise<unknown>;
+    let release: () => void = () => {};
+    const gate = new Promise<void>(r => {
+      release = r;
+    });
+    http.get.mockImplementation(async (path: string, q?: unknown) => {
+      if (path === '/v1/topics') await gate;
+      return base(path, q);
+    });
+    await renderWithProviders(<ScheduleScreen />, http);
+    await waitFor(() =>
+      expect(http.get.mock.calls.some(c => c[0] === '/v1/agenda')).toBeTruthy(),
+    );
+    expect(await screen.findByTestId('loading')).toBeOnTheScreen();
+    expect(screen.queryByText('Nothing due in the next 30 days')).toBeNull();
+    expect(screen.queryByText('No topics yet')).toBeNull();
+    await act(async () => {
+      release();
+    });
+    expect(await screen.findByText('No topics yet')).toBeOnTheScreen();
+    expect(screen.queryByText('Nothing due in the next 30 days')).toBeNull();
+  });
+
+  it('an empty agenda with topics that failed to load offers Retry', async () => {
+    const http = httpWith([], []);
+    const base = http.get.getMockImplementation() as (
+      p: string,
+      q?: unknown,
+    ) => Promise<unknown>;
+    let fail = true;
+    http.get.mockImplementation(async (path: string, q?: unknown) => {
+      if (fail && path === '/v1/topics') {
+        throw new ApiError('NETWORK', 0);
+      }
+      return base(path, q);
+    });
+    await renderWithProviders(<ScheduleScreen />, http);
+    expect(
+      await screen.findByText("Can't reach the server — try again"),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Nothing due in the next 30 days')).toBeNull();
+    fail = false;
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(await screen.findByText('No topics yet')).toBeOnTheScreen();
+  });
+
+  it('a tab re-press scrolls the list back to the top', async () => {
+    mockScrollRefs.length = 0;
+    await renderWithProviders(<ScheduleScreen />, httpWith(items));
+    await screen.findByText('Hernia');
+    const ref = mockScrollRefs.at(-1) as {
+      current: { scrollToLocation?: unknown };
+    };
+    expect(ref.current).toBeTruthy();
+    expect(typeof ref.current.scrollToLocation).toBe('function');
   });
 });
