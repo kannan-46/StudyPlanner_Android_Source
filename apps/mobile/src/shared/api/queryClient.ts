@@ -17,12 +17,15 @@ export const queryKeys = {
 };
 
 /**
- * Queries refreshed when the app returns to the foreground. The update check
- * keeps its own 6-hour staleTime instead of refetching on every return.
+ * Queries that hold the user's data: everything except the update check,
+ * which keeps its own 6-hour staleTime and is not affected by data changes.
  */
-export const refreshOnForeground = (query: {
+export const isUserDataQuery = (query: {
   queryKey: readonly unknown[];
 }): boolean => query.queryKey[0] !== 'appUpdate';
+
+/** Queries refreshed when the app returns to the foreground. */
+export const refreshOnForeground = isUserDataQuery;
 
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   if (error instanceof ApiError) {

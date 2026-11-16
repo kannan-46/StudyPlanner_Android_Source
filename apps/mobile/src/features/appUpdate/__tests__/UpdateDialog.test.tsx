@@ -1,6 +1,18 @@
 import React from 'react';
-import { Linking, NativeModules, Text } from 'react-native';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import {
+  Linking,
+  NativeModules,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+} from 'react-native';
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiError } from '../../../shared/api/errors';
 import { refreshOnForeground } from '../../../shared/api/queryClient';
@@ -9,9 +21,23 @@ import {
   makeHttp,
   renderWithProviders,
 } from '../../../test/testUtils';
+import { useImportBackup } from '../../backup/hooks';
 import { parseAppVersion } from '../api';
 import { DOWNLOAD_FAILED_TEXT, UpdateDialog } from '../UpdateDialog';
 import { UPDATE_CHECK_STALE_MS, useUpdateCheck } from '../useUpdateCheck';
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+const mockDims = (width: number, height = 800, fontScale = 1) =>
+  (useWindowDimensions as jest.Mock).mockReturnValue({
+    width,
+    height,
+    scale: 2,
+    fontScale,
+  });
 
 const URL = 'https://github.com/x/y/releases/latest';
 const release = (code: number, notes: string | null = null) => ({
@@ -42,6 +68,7 @@ const versionCalls = (http: ReturnType<typeof makeHttp>) =>
   http.get.mock.calls.filter(c => c[0] === '/v1/app/version').length;
 
 beforeEach(async () => {
+  mockDims(360);
   await AsyncStorage.clear();
   NativeModules.AppConfig.VERSION_CODE = 5;
   NativeModules.AppConfig.VERSION_NAME = '4.1.0';
@@ -64,14 +91,37 @@ it('shows a centred dialog with notes when the server has a newer version', asyn
   expect(screen.getByRole('button', { name: 'Later' })).toBeTruthy();
 });
 
-it('holds at 320 dp with a large font scale', async () => {
-  const dims = jest.spyOn(require('react-native'), 'useWindowDimensions');
-  dims.mockReturnValue({ width: 320, height: 640, scale: 2, fontScale: 2 });
+it('holds at 320 dp with a large font scale: full-width card, scrolling body', async () => {
+  mockDims(320, 640, 2);
   const http = httpWith(async () => release(6, 'A '.repeat(300)));
   await renderWithProviders(<Harness />, http);
-  expect(await screen.findByTestId('update-dialog')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Later' })).toBeTruthy();
+  const body = await screen.findByTestId('update-dialog');
+  const card = StyleSheet.flatten(
+    screen.getByTestId('dialog-card').props.style,
+  );
+  expect(card.width).toBe('100%');
+  expect(card.maxWidth).toBe(480);
+  expect(card.maxHeight).toBe('90%');
+  // Long notes and both buttons sit inside the scroll view, so nothing clips.
+  let scroll = body.parent;
+  while (scroll && scroll.type !== 'RCTScrollView') scroll = scroll.parent;
+  expect(scroll).toBeTruthy();
+  expect(
+    within(scroll!).getByRole('button', { name: 'Download' }),
+  ).toBeTruthy();
+  expect(within(scroll!).getByRole('button', { name: 'Later' })).toBeTruthy();
+});
+
+it('caps the card width on large screens', async () => {
+  mockDims(1000, 800);
+  const http = httpWith(async () => release(6));
+  await renderWithProviders(<Harness />, http);
+  await screen.findByTestId('update-dialog');
+  const card = StyleSheet.flatten(
+    screen.getByTestId('dialog-card').props.style,
+  );
+  expect(card.width).toBe('100%');
+  expect(card.maxWidth).toBe(560);
 });
 
 it.each([
@@ -193,6 +243,39 @@ it('shows the dialog again after the next check from the server', async () => {
 
   await fireEvent.press(screen.getByText('recheck'));
   expect(await screen.findByTestId('update-dialog')).toBeTruthy();
+});
+
+it('a backup restore does not bring back a closed dialog', async () => {
+  jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  const http = httpWith(async () => release(6));
+  http.post.mockResolvedValue({
+    imported: { exams: 0, subjects: 0, topics: 0, mockTests: 0 },
+    skipped: { topics: 0 },
+  });
+  function WithRestore() {
+    const check = useUpdateCheck();
+    const restore = useImportBackup();
+    return (
+      <>
+        <UpdateDialog check={check} />
+        <Text onPress={() => restore.mutate({ mode: 'merge', data: {} })}>
+          restore
+        </Text>
+        {restore.isSuccess ? <Text>restored</Text> : null}
+      </>
+    );
+  }
+  await renderWithProviders(<WithRestore />, http);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Download' }),
+  );
+  await waitFor(() => expect(screen.queryByTestId('update-dialog')).toBeNull());
+
+  await fireEvent.press(screen.getByText('restore'));
+  expect(await screen.findByText('restored')).toBeTruthy();
+  await settle();
+  expect(screen.queryByTestId('update-dialog')).toBeNull();
+  expect(versionCalls(http)).toBe(1);
 });
 
 it('says so in the dialog when the download link cannot be opened', async () => {

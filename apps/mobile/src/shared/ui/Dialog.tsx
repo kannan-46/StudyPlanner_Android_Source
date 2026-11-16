@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { Modal, ScrollView, Text, View } from 'react-native';
+import { dialogMaxWidthFor, useResponsive } from './responsive';
 import { useTheme } from './ThemeProvider';
 
 /** Simple centred modal dialog; body scrolls so large font scales never clip. */
@@ -17,6 +18,7 @@ export function Dialog({
   actions: ReactNode;
 }) {
   const { colors, radius, spacing } = useTheme();
+  const { size } = useResponsive();
   return (
     <Modal
       visible={visible}
@@ -34,9 +36,10 @@ export function Dialog({
         }}
       >
         <View
+          testID="dialog-card"
           style={{
             width: '100%',
-            maxWidth: 480,
+            maxWidth: dialogMaxWidthFor(size),
             maxHeight: '90%',
             backgroundColor: colors.surface,
             borderRadius: radius.lg,

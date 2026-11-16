@@ -35,6 +35,11 @@ export function columnsFor(
   return map[size];
 }
 
+/** Width cap for a centred dialog card (its width is otherwise 100%). */
+export function dialogMaxWidthFor(size: SizeClass): number {
+  return size === 'expanded' ? 560 : 480;
+}
+
 /** Centres content with a max width once the window is 700 dp or wider. */
 export function ResponsiveContainer({
   children,

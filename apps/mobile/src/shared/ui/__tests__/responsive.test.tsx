@@ -1,7 +1,12 @@
 import React from 'react';
 import { Text, View, useWindowDimensions } from 'react-native';
 import { render } from '@testing-library/react-native';
-import { ResponsiveContainer, columnsFor, useResponsive } from '../responsive';
+import {
+  ResponsiveContainer,
+  columnsFor,
+  dialogMaxWidthFor,
+  useResponsive,
+} from '../responsive';
 
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
@@ -70,4 +75,10 @@ it('ResponsiveContainer applies maxWidth 720 only at >= 700', async () => {
   expect(JSON.stringify(await style(320))).not.toContain('720');
   expect(JSON.stringify(await style(700))).toContain('720');
   expect(JSON.stringify(await style(1000))).toContain('720');
+});
+
+it('caps dialog cards at 480 dp, 560 dp on expanded windows', () => {
+  expect(dialogMaxWidthFor('compact')).toBe(480);
+  expect(dialogMaxWidthFor('medium')).toBe(480);
+  expect(dialogMaxWidthFor('expanded')).toBe(560);
 });
